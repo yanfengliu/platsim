@@ -1,0 +1,45 @@
+name: Mosslight Godot checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  godot:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Download verified Godot 4.7.2
+        shell: pwsh
+        run: |
+          $runtimeDir = Join-Path $env:RUNNER_TEMP 'mosslight-godot-4.7.2'
+          New-Item -ItemType Directory -Force $runtimeDir | Out-Null
+          $archive = Join-Path $runtimeDir 'godot.zip'
+          Invoke-WebRequest 'https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip' -OutFile $archive
+          $expected = '83decd58fdf67b9d657958a1ae6bf1929c20785315a81effe245874cdc57acb709bf868e00778a96984338c1b29dafdb453c6847747694621c6ecf5da2259993'
+          if ((Get-FileHash $archive -Algorithm SHA512).Hash.ToLower() -ne $expected) { throw 'Godot checksum mismatch' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $runtimeDir
+          New-Item -ItemType File -Path (Join-Path $runtimeDir '_sc_') | Out-Null
+          "GODOT_BIN=$(Join-Path $runtimeDir 'Godot_v4.7.2-stable_win64_console.exe')" >> $env:GITHUB_ENV
+      - name: Import the Godot project
+        run: node mosslight/tools/godot.mjs import
+      - name: Test the colony simulation
+        run: node mosslight/tools/godot.mjs test
+      - name: Remove task runtime
+        if: always()
+        shell: pwsh
+        run: |
+          $runtimeDir = Join-Path $env:RUNNER_TEMP 'mosslight-godot-4.7.2'
+          if (Test-Path -LiteralPath $runtimeDir) {
+            $resolved = (Resolve-Path -LiteralPath $runtimeDir).Path
+            $expected = Join-Path $env:RUNNER_TEMP 'mosslight-godot-4.7.2'
+            if ($resolved -ne $expected) { throw 'Unexpected cleanup path' }
+            Remove-Item -LiteralPath $resolved -Recurse -Force
+          }
