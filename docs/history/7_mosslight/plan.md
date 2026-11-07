@@ -1,6 +1,6 @@
 # Mosslight Godot survival prototype
 
-Status: active
+Status: complete
 Owner: Codex
 Created: 2026-11-07
 Updated: 2026-11-07
@@ -24,7 +24,7 @@ GDScript with Godot Compatibility rendering. The Node-free simulation owns colon
 - [x] Real keyboard/mouse controls work in an exported headless browser; inspected full-resolution renders fit 1280x800, 720x560, 320x640 and compact breakpoint widths.
 - [x] Illustrated rendering sustains at least 30 frames/s on the verified hardware GPU at normal and wide cave views; cached scenery updates after excavation, construction, camera movement and resize.
 - [x] Existing npm syntax, simulation and build gates pass; work records and staged artifact/secret/size checks pass.
-- [ ] Independent review findings are resolved or explicitly recorded, code is merged and pushed, CI is followed, and task-owned processes and disposable outputs are cleaned.
+- [x] Independent review findings are resolved or explicitly recorded, code is merged and pushed, CI is followed, and task-owned processes and disposable outputs are cleaned.
 
 ## Implementation steps
 
@@ -32,10 +32,12 @@ GDScript with Godot Compatibility rendering. The Node-free simulation owns colon
 - [x] Simulation worker: authoritative grid, workers, jobs, both foundation-race orderings and multilevel terrain; 277 checks pass, including the full command-only twenty-minute route. Focused terrain and foundation gates are red on the original defects and green on the repairs.
 - [x] Presentation worker: original illustrated cave, responsive controls, cached rendering and playable Godot scene.
 - [x] Tooling worker: portable engine, export presets, verification commands, native packages and run instructions.
-- [ ] Coordinator: integrate, inspect real play, run gates, obtain independent review and land verified result.
+- [x] Coordinator: integrate, inspect real play, run gates, obtain independent review and land verified result.
 
 ## Outcome
 
 Mosslight is implemented with detailed original illustration and four inhabited elevations linked to a lower quarry. The complete simulation passes 277 checks; the old flat map fails seven of thirteen terrain checks, and the queued-foundation defect fails 77 of 168 focused checks before repair. A full ordinary keyboard/mouse expedition physically descended the shaft, mined ore and roots, built the beacon and won after 1200 simulation seconds with all four settlers at full health; actual victory/retry and modal focus passed all three primary viewports. The source-bound run excludes only a subsequent one-line tool-switch latch clear, independently reviewed and verified with four actual-control red/green cases on the final export. Compact center and near-boundary Dig strokes preserve exact target mapping after text wraps.
 
-Full-resolution fixed, zoomed, moved and arbitrary camera views accept the illustrated cave, props, vegetation, settlers and clean alpha. World-space caches corrected a measured 2–4 frames/s failure to 52.5/56.4/57.5 frames/s in normal/moving/wide RTX4090 samples; a warmed 3x run advanced three simulation seconds per second. Final actual controls pass all nine title breakpoints, three primary viewports, keyboard construction/tool scrolling, tall-sprite inspection, modal drag clearing and pause pixel stability. A keyboard harness initially polled faster than the read-only snapshot cadence; the same visibility/action assertions pass when each Tab waits for fresh state, with no source change. Windows and universal Intel/Apple Silicon Mac packages are built from the final source, and Windows passes a hidden headless launch. Native Mac execution and notarization are not claimed. All 108 existing Emberwake tests, syntax/build and work-record checks pass. Review reports and failed counterevidence are retained; the Claude lane was unavailable through expired authentication. Merge/push, CI and final cleanup remain pending.
+Full-resolution fixed, zoomed, moved and arbitrary camera views accept the illustrated cave, props, vegetation, settlers and clean alpha. World-space caches corrected a measured 2–4 frames/s failure to 52.5/56.4/57.5 frames/s in normal/moving/wide RTX4090 samples; a warmed 3x run advanced three simulation seconds per second. Final actual controls pass all nine title breakpoints, three primary viewports, keyboard construction/tool scrolling, tall-sprite inspection, modal drag clearing and pause pixel stability. A keyboard harness initially polled faster than the read-only snapshot cadence; the same visibility/action assertions pass when each Tab waits for fresh state, with no source change. Windows and universal Intel/Apple Silicon Mac packages are built from the final source, and Windows passes a hidden headless launch. Native Mac execution and notarization are not claimed. All 108 existing Emberwake tests, syntax/build and work-record checks pass. Review reports and failed counterevidence are retained; the Claude lane was unavailable through expired authentication.
+
+Implementation commit 7d6b0da was integrated with the concurrent main policy update as 50cf8b08a31ae013e9596d2be11154a8a447ca86, verified again on that merged tree, and pushed to main. Both [Game checks](https://github.com/yanfengliu/platformer/actions/runs/42415348310) and [Mosslight Godot checks](https://github.com/yanfengliu/platformer/actions/runs/42415348332) completed successfully. Only this delivery record changes after that tested code revision. Final artifacts, source/artifact hashes, review snapshots, selected failed/passing evidence and the portable Windows editor are retained under ignored output/mosslight in the primary checkout; original generated PNG artwork remains under output/imagegen/mosslight. The process audit checked 14 owned profiles and 125 recorded processes, with zero leftovers and zero active Godot processes; empty task-created AppData folders were removed. The temporary implementation worktree and branch are removed after this record lands. The app-managed detached workspace remains at the delivered revision because the app protects it as this chat's primary workspace; no unmerged work remains there.
