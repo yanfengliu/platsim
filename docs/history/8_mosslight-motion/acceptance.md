@@ -1,6 +1,6 @@
 # Motion and settings acceptance
 
-Status: local acceptance passed; source delivery and CI pending. Base e97177b; reviewed source copies and raw checks are retained under the primary checkout's ignored output/mosslight-motion/evidence directory.
+Status: accepted and delivered, within the native measurement bounds below. Base e97177b; code revision 8e6b2b46eda111a7f8542ea32841e6d4fa553927 is merged and pushed to main. Reviewed source copies and raw checks are retained under the primary checkout's ignored output/mosslight-motion/evidence directory.
 
 ## Regression and source checks
 
@@ -39,4 +39,12 @@ Native engine-input Settings captures independently show applied 150% at 1280x80
 
 Final browser acceptance repeats all nine viewport and 150/200% checks against web pack SHA256 f033d68744be25333f8ed17e2b7a8108ab7b6d1a57d4c2905608e58c60457a9b. Ordinary keyboard/mouse controls plant food and air, excavate the shaft, build its ladder, send a worker physically into the quarry, gather ore/roots and construct a beacon. The natural wall-clock run wins at 1200 simulation seconds with all four settlers at 100 health. Escape/Settings/Back preserves victory at 1280x800, 720x560 and 320x640. Returning to 1280 restores 150%, and a real Restart click creates four healthy settlers in a fresh colony while retaining that scale. Full-resolution outcome and retry captures pass visual inspection. The browser console contains no errors. Its one-second RAF sample is 53fps; this is real-control/layout proof, not a browser 60fps claim. The requested Windows performance evidence is the separate native measurement above.
 
-The final browser session closes its context, daemon, child processes and localhost server in finally; its ownership audit reports zero remaining task processes. All owned native runs also exited. Final source diff checks, staged-file limits and secret-pattern scans pass; no manifest or dependency changed. Source delivery and CI remain pending.
+The final browser session closes its context, daemon, child processes and localhost server in finally; its ownership audit reports zero remaining task processes. All owned native runs also exited, and the final independent process inventory finds zero owned matches. Final source diff checks, staged-file limits and secret-pattern scans pass; no manifest or dependency changed.
+
+## Delivery
+
+Code revision 8e6b2b46eda111a7f8542ea32841e6d4fa553927 fast-forwards the unchanged main base and is pushed. Both [Game checks](https://github.com/yanfengliu/platformer/actions/runs/42432184887) and [Mosslight Godot checks](https://github.com/yanfengliu/platformer/actions/runs/42432184885) finish successfully; the Godot job imports the project and runs all four suites. The closing documentation commit changes no runtime source.
+
+Updated playable artifacts are retained at C:/Users/38909/Documents/github/platformer/output/mosslight: Mosslight.exe (113,582,672 bytes, SHA256 61f8eadbaad15e34bc99a5dbae64954cf194c21f962c182c8f4b42cfa713aa04), Mosslight-macOS.zip (65,073,371 bytes, SHA256 ff0782ba025c633c65c97a420a4da00217791fcb8b6ec608f63442eeac6ce432), and web/. PLAY.md explains Escape/Settings and session scaling; delivery.json lists every delivered artifact hash and measurement limits. Previous delivery identity, native traces/captures, real-control browser logs/captures, red/green tests and review snapshots are retained under output/mosslight-motion/evidence. Large binaries and raw evidence remain ignored and are not committed.
+
+Closure removes only the isolated .worktrees/mosslight-motion checkout, its branch and its disposable templates/duplicate native binaries after evidence retention. The app-managed detached checkout is retained and advanced to delivered main. No localhost server or owned native/browser session is intentionally left running. Native Windows OS-input delivery and compositor timing, natural-cadence video, native Mac execution and browser 60fps are outside the verified claims; none is silently treated as a pass.
