@@ -124,7 +124,7 @@ func _process(_delta: float) -> void:
 
 func reset_motion() -> void:
 	if simulation:
-		_motion.reset(simulation.colonists)
+		_motion.reset(simulation.colonists, simulation.jobs)
 	# A reset may reuse the same elapsed time with different terrain.
 	_observed_time = -1.0
 	_clock = 0.0
@@ -132,10 +132,10 @@ func reset_motion() -> void:
 	_facing.clear()
 
 func begin_simulation_step() -> void:
-	_motion.begin_step(simulation.colonists)
+	_motion.begin_step(simulation.colonists, simulation.jobs)
 
 func end_simulation_step() -> void:
-	_motion.end_step(simulation.colonists)
+	_motion.end_step(simulation.colonists, simulation.jobs)
 
 func present_frame(alpha: float, delta: float, simulation_speed: float, running: bool) -> void:
 	_motion.present(alpha, delta, simulation_speed, running, reduced_motion)

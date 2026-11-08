@@ -9,47 +9,59 @@ const MOTION_EPSILON: float = 0.00001
 
 var _samples: Dictionary = {}
 
-func reset(colonists: Array) -> void:
+func reset(colonists: Array, jobs: Array = []) -> void:
 	_samples.clear()
 	for colonist in colonists:
-		_samples[colonist.id] = _new_sample(colonist)
+		_samples[colonist.id] = _new_sample(colonist, jobs)
 
-func _new_sample(colonist: Dictionary) -> Dictionary:
+func _new_sample(colonist: Dictionary, jobs: Array = []) -> Dictionary:
 	var position: Vector2 = colonist.pos
 	var sample: Dictionary = {
 		"previous": position, "current": position, "rendered": position,
 		"walk": 0.0, "work": 0.0, "climb": 0.0,
 		"phase": float(colonist.id) * 0.37, "clock": 0.0, "facing": 1.0,
-		"alive": true, "resting": false, "wants_work": false
+		"alive": true, "resting": false, "wants_work": false,
+		"dig_job": -1, "dig_cell": Vector2.ZERO, "dig_clock": 0.0, "dig_active": false
 	}
-	_read_activity(sample, colonist)
+	_read_activity(sample, colonist, jobs)
 	return sample
 
-func _read_activity(sample: Dictionary, colonist: Dictionary) -> void:
+func _read_activity(sample: Dictionary, colonist: Dictionary, jobs: Array = []) -> void:
 	var path: Array = colonist.get("path", [])
 	var task: String = str(colonist.get("task", ""))
 	sample.alive = bool(colonist.get("alive", true))
 	# The simulation reserves a bed and sets resting before the walk to it.
 	sample.resting = task.begins_with("Resting") or (bool(colonist.get("resting", false)) and path.is_empty())
 	sample.wants_work = sample.alive and not sample.resting and path.is_empty() and int(colonist.get("job", -1)) >= 0 and (task.begins_with("Digging") or task.begins_with("Building"))
+	var dig_job := -1
+	if sample.wants_work and task.begins_with("Digging"):
+		for job in jobs:
+			if job.id == colonist.job and job.kind == "dig":
+				dig_job = int(job.id)
+				sample.dig_cell = Vector2(job.cell)
+				break
+	if dig_job != sample.dig_job:
+		sample.dig_clock = 0.0
+		sample.dig_active = false
+	sample.dig_job = dig_job
 
-func begin_step(colonists: Array) -> void:
+func begin_step(colonists: Array, jobs: Array = []) -> void:
 	for colonist in colonists:
 		if not _samples.has(colonist.id):
-			_samples[colonist.id] = _new_sample(colonist)
+			_samples[colonist.id] = _new_sample(colonist, jobs)
 		var sample: Dictionary = _samples[colonist.id]
 		sample.previous = Vector2(colonist.pos)
 		sample.current = Vector2(colonist.pos)
 
-func end_step(colonists: Array) -> void:
+func end_step(colonists: Array, jobs: Array = []) -> void:
 	var present_ids: Dictionary = {}
 	for colonist in colonists:
 		present_ids[colonist.id] = true
 		if not _samples.has(colonist.id):
-			_samples[colonist.id] = _new_sample(colonist)
+			_samples[colonist.id] = _new_sample(colonist, jobs)
 		var sample: Dictionary = _samples[colonist.id]
 		sample.current = Vector2(colonist.pos)
-		_read_activity(sample, colonist)
+		_read_activity(sample, colonist, jobs)
 	for id in _samples.keys():
 		if not present_ids.has(id):
 			_samples.erase(id)
@@ -80,6 +92,12 @@ func present(alpha: float, delta: float, speed: float, running: bool, reduced_mo
 		var can_animate: bool = sample.alive and (not sample.resting or moving) and not reduced_motion
 		var walking_target: float = 1.0 if moving and can_animate else 0.0
 		var working_target: float = 1.0 if sample.wants_work and not moving and can_animate else 0.0
+		sample.dig_active = working_target > 0.0 and sample.dig_job >= 0 and position.distance_to(Vector2(sample.current)) <= MOTION_EPSILON
+		if sample.dig_active:
+			sample.dig_clock += frame_delta * rate
+			var toward: Vector2 = sample.dig_cell - position
+			if absf(toward.x) > 0.1:
+				sample.facing = signf(toward.x)
 		var climbing_target: float = absf(travel.y) / distance if moving and can_animate else 0.0
 		sample.walk = _blend(sample.walk, walking_target, blend)
 		sample.work = _blend(sample.work, working_target, blend)
@@ -105,6 +123,10 @@ func pose(colonist: Dictionary) -> Dictionary:
 	result.visual_phase = sample.phase
 	result.visual_clock = sample.clock
 	result.visual_facing = sample.facing
+	# UI cancellation can change the job while paused, before another sim tick.
+	result.visual_digging = sample.dig_active and bool(colonist.get("alive", true)) and int(colonist.get("job", -1)) == sample.dig_job and colonist.get("path", []).is_empty() and str(colonist.get("task", "")).begins_with("Digging")
+	result.visual_dig_clock = sample.dig_clock
+	result.visual_dig_target = Vector2(sample.dig_cell) - Vector2(sample.rendered)
 	# Reduced motion hides gait weights, so endpoint arrival is an independent
 	# requirement. A bed reservation alone must never make a moving body lie down.
 	result.visual_resting = sample.alive and sample.resting and Vector2(sample.rendered).distance_to(Vector2(sample.current)) <= MOTION_EPSILON and sample.walk < 0.05

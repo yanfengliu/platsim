@@ -8,6 +8,7 @@ const EDGE := Color("8a9472")
 const MOSS := Color("648359")
 const PALE := Color("b8c98b")
 const LIMESTONE = preload("res://assets/illustration/limestone.webp")
+const DiggingMotion = preload("res://scripts/digging_motion.gd")
 
 func _init(target: CanvasItem) -> void:
 	canvas = target
@@ -159,6 +160,9 @@ func settler(pos: Vector2, unit: float, colonist: Dictionary, clock: float, faci
 	var climb_weight: float = colonist.get("visual_climb_weight", 0.0)
 	var phase: float = colonist.get("visual_phase", clock * 8.0 + index)
 	var resting: bool = colonist.get("visual_resting", false)
+	var digging := bool(colonist.get("visual_digging", false))
+	var dig := DiggingMotion.pose(float(colonist.get("visual_dig_clock", 0.0)), Vector2(colonist.get("visual_dig_target", Vector2.RIGHT)), facing) if digging else {}
+	var body: Vector2 = dig.body_offset if digging else Vector2.ZERO
 	var stride := sin(phase) * 0.13 * walk_weight * (1.0 - climb_weight)
 	var breath := sin(clock * 2.0 + index) * 0.012
 	ellipse(Vector2(0.5, 0.99), Vector2(0.37, 0.075), Color(0.03, 0.08, 0.07, 0.48))
@@ -175,11 +179,12 @@ func settler(pos: Vector2, unit: float, colonist: Dictionary, clock: float, faci
 		var x: float = pair[0]
 		var shift: float = pair[1]
 		var lift := maxf(0.0, sin(phase + float(pair[2]))) * (0.055 * walk_weight + 0.2 * climb_weight)
-		stroke([Vector2(x, 0.48), Vector2(x + shift * 0.7, 0.73 - lift * 0.5), Vector2(x + shift, 0.91 - lift)], Color("314b46"), 0.17)
-		stroke([Vector2(x - 0.025, 0.51), Vector2(x + shift * 0.7 - 0.025, 0.73 - lift * 0.5), Vector2(x + shift - 0.025, 0.86 - lift)], coat.darkened(0.18), 0.09)
+		stroke([Vector2(x, 0.48) + body, Vector2(x + shift * 0.7 + body.x * 0.5, 0.73 - lift * 0.5 + body.y * 0.5), Vector2(x + shift, 0.91 - lift)], Color("314b46"), 0.17)
+		stroke([Vector2(x - 0.025, 0.51) + body, Vector2(x + shift * 0.7 - 0.025 + body.x * 0.5, 0.73 - lift * 0.5 + body.y * 0.5), Vector2(x + shift - 0.025, 0.86 - lift)], coat.darkened(0.18), 0.09)
 		ellipse(Vector2(x + shift + facing * 0.045, 0.94 - lift), Vector2(0.14, 0.075), Color("403c31"))
 		canvas.draw_line(Vector2(x + shift - 0.09, 0.98 - lift), Vector2(x + shift + 0.11, 0.98 - lift), Color("aa9c76"), 0.025, true)
 	# The pack, straps, shaped coat, belt and pockets have their own materials.
+	canvas.draw_set_transform(pos + body * unit, 0, Vector2.ONE * unit)
 	ellipse(Vector2(0.5 - facing * 0.26, 0.22), Vector2(0.19, 0.29), Color("3c5144"))
 	ellipse(Vector2(0.49 - facing * 0.28, 0.18), Vector2(0.15, 0.23), Color("998963"))
 	ellipse(Vector2(0.5, 0.2 + breath), Vector2(0.3, 0.36), coat.darkened(0.28))
@@ -190,17 +195,24 @@ func settler(pos: Vector2, unit: float, colonist: Dictionary, clock: float, faci
 	stroke([Vector2(0.25, 0.42), Vector2(0.5, 0.45), Vector2(0.76, 0.42)], Color("60503b"), 0.08)
 	canvas.draw_rect(Rect2(0.46, 0.405, 0.1, 0.085), Color("d6bd7c"))
 	ellipse(Vector2(0.68, 0.37), Vector2(0.09, 0.12), coat.darkened(0.18))
-	# Arms swing while walking and lift a visible implement during work.
+	# Both hands follow the rotating shaft while the torso leans into the strike.
 	var arm_tip := Vector2(0.82, 0.38 - stride)
 	var swing := sin(clock * 5.0 + index)
 	arm_tip = arm_tip.lerp(Vector2(0.8, 0.08 + sin(phase) * 0.24), climb_weight)
-	arm_tip = arm_tip.lerp(Vector2(0.87 + swing * 0.06, 0.02 + swing * 0.2), work_weight)
-	stroke([Vector2(0.73, 0.04), Vector2(0.83, 0.2), arm_tip], coat.darkened(0.1), 0.15)
+	var building_weight := work_weight if str(colonist.get("task", "")).begins_with("Building") else 0.0
+	arm_tip = arm_tip.lerp(Vector2(0.87 + swing * 0.06, 0.02 + swing * 0.2), building_weight)
+	if digging:
+		arm_tip = Vector2(dig.hand_front) - body
+	var elbow := Vector2(0.73, 0.04).lerp(arm_tip, 0.5) + Vector2(facing * 0.1, 0.12) if digging else Vector2(0.83, 0.2)
+	stroke([Vector2(0.73, 0.04), elbow, arm_tip], coat.darkened(0.1), 0.15)
 	ellipse(arm_tip, Vector2(0.09, 0.09), skin)
 	var other_hand := Vector2(0.2, 0.36 + stride).lerp(Vector2(0.2, 0.08 - sin(phase) * 0.24), climb_weight)
-	stroke([Vector2(0.27, 0.06), Vector2(0.18, 0.2), other_hand], coat.darkened(0.18), 0.14)
+	if digging:
+		other_hand = Vector2(dig.hand_back) - body
+	var other_elbow := Vector2(0.27, 0.06).lerp(other_hand, 0.5) + Vector2(-facing * 0.08, 0.14) if digging else Vector2(0.18, 0.2)
+	stroke([Vector2(0.27, 0.06), other_elbow, other_hand], coat.darkened(0.18), 0.14)
 	ellipse(other_hand, Vector2(0.075, 0.08), skin)
-	if work_weight > 0.001:
+	if building_weight > 0.001:
 		stroke([arm_tip + Vector2(-0.08, 0.17), arm_tip + Vector2(0.15, -0.24)], Color(Color("a18c5c"), work_weight), 0.055)
 		stroke([arm_tip + Vector2(0, -0.29), arm_tip + Vector2(0.15, -0.24), arm_tip + Vector2(0.31, -0.16)], Color(Color("b7c3b5"), work_weight), 0.08)
 	# Large faces remain readable when zoomed out, with cheek, nose and eye highlights.
@@ -221,4 +233,29 @@ func settler(pos: Vector2, unit: float, colonist: Dictionary, clock: float, faci
 	ellipse(lamp, Vector2(0.09, 0.095), Color("766349"))
 	ellipse(lamp, Vector2(0.06, 0.065), Color("f2d69d"))
 	canvas.draw_circle(lamp + Vector2(-0.015, -0.025), 0.028, Color("fff4cc"))
+	if digging:
+		canvas.draw_set_transform(pos, 0, Vector2.ONE * unit)
+		_digging_tool(dig, skin, work_weight)
 	canvas.draw_set_transform(Vector2.ZERO)
+
+func _digging_tool(pose: Dictionary, skin: Color, weight: float) -> void:
+	if pose.trail.size() > 1:
+		stroke(pose.trail, Color(0.87, 0.9, 0.72, 0.26 * weight), 0.09)
+	# Dark edging and a lit metal bevel keep the full swing readable at normal zoom.
+	stroke([pose.shaft_bottom, pose.shaft_top], Color(Color("354238"), weight), 0.105)
+	stroke([pose.shaft_bottom, pose.shaft_top], Color(Color("a18c5c"), weight), 0.055)
+	stroke(pose.pick_points, Color(Color("33423d"), weight), 0.13)
+	stroke(pose.pick_points, Color(Color("b7c3b5"), weight), 0.075)
+	ellipse(pose.hand_back, Vector2(0.075, 0.08), skin)
+	ellipse(pose.hand_front, Vector2(0.085, 0.085), skin)
+	var strength: float = pose.impact * weight
+	if strength > 0.0:
+		var contact: Vector2 = pose.contact
+		ellipse(contact, Vector2(0.19, 0.12) * (0.6 + strength * 0.4), Color(0.92, 0.85, 0.58, strength * 0.32))
+		for i in range(5):
+			var direction := Vector2.from_angle(float(i) * TAU / 5.0 + 0.3)
+			stroke([contact + direction * 0.04, contact + direction * (0.13 + strength * 0.12)], Color(1.0, 0.91, 0.64, strength), 0.028)
+		# A short dark fracture sits on the same impact point as the pick tip.
+		stroke([contact + Vector2(-0.12, -0.04), contact, contact + Vector2(0.08, 0.09), contact + Vector2(0.15, 0.06)], Color(0.12, 0.21, 0.17, strength * 0.85), 0.025)
+	for chip in pose.debris:
+		ellipse(chip.position, Vector2(chip.radius, chip.radius * 0.65), Color(0.7, 0.73, 0.52, chip.alpha * weight), 5)

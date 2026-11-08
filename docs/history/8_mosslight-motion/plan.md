@@ -1,6 +1,6 @@
 # Smooth Mosslight motion and scalable settings
 
-Status: delivered
+Status: active
 Owner: Codex
 Created: 2026-11-07
 Updated: 2026-11-07
@@ -32,5 +32,7 @@ Work in isolated codex/mosslight-motion from e97177b. Coordinator owns world_vie
 - [x] Integrate, review, measure and inspect the result, then deliver updated builds and source.
 
 ## Outcome
+
+Follow-up, 2026-11-07: the owner accepts smoothness but reports that digging has only a small tool bob, with no swing or impact. Continue this animation work unit on codex/mosslight-digging from 8f3655a. Add a readable two-handed wind-up, accelerated strike, contact beat, recoil and bounded debris aimed at the active rock cell; preserve simulation rules, pause behavior and the accepted frame budget. Coordinator owns production art/motion and real-control browser acceptance; tooling owns exports and a separately labeled native GPU replay check. Add actual drawing/target/impact regression coverage and exact-source independent review, then deliver and clean the isolated worktree. Earlier acceptance and reviews remain historical records.
 
 All 707 Godot checks pass: 277 simulation, 291 motion, 77 UI and 62 terrain checks; npm check, all 108 Emberwake tests and build pass. Windows, web and universal Mac exports pass. Independent review closed resume, resting and fractional-zoom cache-seam findings. Full-resolution regional terrain caching removes the measured excavation stalls without reducing illustration detail: all measured active native gameplay frames stay below 16.7ms, with a 15.067ms maximum, 300–313fps section averages and no repeated moving positions. Real-input browser acceptance passes nine viewports, 150/200% scaling, world pointer mapping, keyboard scrolling and modal state restoration. The natural 1200-second expedition wins with all four settlers healthy; outcome menus and fresh-colony retry preserve UI scale. Native OS input automation and compositor timestamps remain unavailable, so the Windows result is explicitly instrumented native GPU evidence. Native Mac execution is untested; the browser's 53fps sample does not meet a browser 60fps claim. Code 8e6b2b46eda111a7f8542ea32841e6d4fa553927 is merged and pushed to main, both CI workflows pass, and updated playable builds plus evidence are retained in the primary checkout's output folders. Owned-process audits are clear; closure removes the isolated checkout and branch while retaining the app-managed checkout. See acceptance.md for exact hashes, CI links and limits.
