@@ -147,3 +147,11 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Godot imports, local builds and task evidence
+.godot/
+output/
+tmp/
+.worktrees/
+.playwright-cli/
+mosslight/exports/

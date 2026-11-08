@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "allocations": [
+    {
+      "id": 0,
+      "theme": "mosslight",
+      "legacyFiles": [
+        {
+          "path": "historical/design.md",
+          "sha256": "caa322ce0bdcb90188d60e9c1c326eced7a3832cdbfee7bcc495cb33b74e708b",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/7_mosslight/design.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/7_mosslight/design.md"
+        },
+        {
+          "path": "historical/plan.md",
+          "sha256": "5c9c2193ff8275371022bc1e91bd633cc9bfd634d9180eefb7db7bb017255506",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/7_mosslight/plan.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/7_mosslight/plan.md"
+        },
+        {
+          "path": "reviews/0_implementation.md",
+          "sha256": "6ff5870771d46a0524418dc2d3f67784d6755767354b939df5aba684243f4914",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/7_mosslight/reviews/0_implementation.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/7_mosslight/reviews/0_implementation.md"
+        },
+        {
+          "path": "reviews/1_integration.md",
+          "sha256": "149fae4eaac675979004201e72e35c447baf80c0a988f18bc6fea6a6702a73ee",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/7_mosslight/reviews/1_integration.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/7_mosslight/reviews/1_integration.md"
+        },
+        {
+          "path": "reviews/2_integration.md",
+          "sha256": "50cf3d301a93c0b1c2a298a880785440f390fa28f4dbecd00e623eef86a78a8f",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/7_mosslight/reviews/2_integration.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/7_mosslight/reviews/2_integration.md"
+        },
+        {
+          "path": "reviews/3_integration.md",
+          "sha256": "ca1cffffc21a2a29a1bd4df708560bd17aaeaec52b00577b12a3777b29142ab0",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/7_mosslight/reviews/3_integration.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/7_mosslight/reviews/3_integration.md"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "theme": "mosslight-motion",
+      "legacyFiles": [
+        {
+          "path": "historical/acceptance.md",
+          "sha256": "d39ec917c66f4754b23c78f3858fef1fbc626ade5c5e43e07dcd346749965aee",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/acceptance.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/acceptance.md"
+        },
+        {
+          "path": "historical/cache-options.md",
+          "sha256": "8094bc9373297911cd08143b5f7b724754cb3bd09fd2490848cacedcaa9ecc66",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/cache-options.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/cache-options.md"
+        },
+        {
+          "path": "historical/capture-check.md",
+          "sha256": "c534b9fa5c29eb274c67e49c4e40c1953fc90cb8f5fa50bffd05b6ed2c25c5fa",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/capture-check.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/capture-check.md"
+        },
+        {
+          "path": "historical/capture-review.md",
+          "sha256": "d13be5ef9b904f8192c203bf703a43e8e778377361d47357fe1f3bd99b401284",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/capture-review.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/capture-review.md"
+        },
+        {
+          "path": "historical/design.md",
+          "sha256": "22d8939b2a490d701350c47ca3036244fce8bf9d087d31559d89aa96509ad318",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/design.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/design.md"
+        },
+        {
+          "path": "historical/frame-pacing-check.md",
+          "sha256": "04fca7731cc1c4c278715941938e2dc4b2636573f543a5ebaa5067db50993568",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/frame-pacing-check.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/frame-pacing-check.md"
+        },
+        {
+          "path": "historical/plan.md",
+          "sha256": "2e948577c15c730838f301a637514d6128e5e334ebfec99f805a17fc59585654",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/plan.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/plan.md"
+        },
+        {
+          "path": "reviews/0_implementation.md",
+          "sha256": "7a35e1f876a34a76574fe92e5693cc6df9c571dc05205c6f7e643c7d94c50bea",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/reviews/0_implementation.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/reviews/0_implementation.md"
+        },
+        {
+          "path": "reviews/1_implementation.md",
+          "sha256": "5ad231f7d672de081ac9cfe42bed01d2399b6e8e8e4e452d83735239f160ee43",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/reviews/1_implementation.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/reviews/1_implementation.md"
+        },
+        {
+          "path": "reviews/2_implementation.md",
+          "sha256": "c51f311a51e0269954d483172a5107bebab2d8d0d4aaf7aafcfd599c25ded95d",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/reviews/2_implementation.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/reviews/2_implementation.md"
+        },
+        {
+          "path": "reviews/3_implementation.md",
+          "sha256": "9aef902e6e505ae4af667f5b58cae2eeadab79aa3a6b9dbae4bec85819c83a09",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/reviews/3_implementation.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/reviews/3_implementation.md"
+        },
+        {
+          "path": "reviews/4_implementation.md",
+          "sha256": "1cdb160365e375cf0bd47fa5e2f23bd6c89ceaa3c1f08547019bbf5a638aa3ae",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/reviews/4_implementation.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/reviews/4_implementation.md"
+        },
+        {
+          "path": "reviews/5_implementation.md",
+          "sha256": "c61a26055806d540ac83ae27b75cdda1617537ba1e3bb40a864ebb5ea130fc6d",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/reviews/5_implementation.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/reviews/5_implementation.md"
+        },
+        {
+          "path": "reviews/6_implementation.md",
+          "sha256": "e0894bc90aed32f4f49a022b918a6397197fa2485df41582b8b89492c4b33f02",
+          "source": "yanfengliu/platformer@53ae474700af2c17bc97da156a66b09e883f78a0:docs/work/8_mosslight-motion/reviews/6_implementation.md; extracted yanfengliu/platsim@a0fb07c25699fd25f313375dc3a9f11117bc16df:docs/history/8_mosslight-motion/reviews/6_implementation.md"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "theme": "mosslight-migration",
+      "legacyFiles": [
+        {
+          "path": "historical/7_implementation.md",
+          "sha256": "d5915bb6f2010b7a07ce96c92c41c2560f27c6f0a2534842374e6456ab1d2041",
+          "source": "Uncommitted source review in platformer pose worktree at C:/Users/38909/Documents/github/platformer/.worktrees/mosslight-pose/docs/work/8_mosslight-motion/reviews/7_implementation.md; recorded SHA256 d5915bb6f2010b7a07ce96c92c41c2560f27c6f0a2534842374e6456ab1d2041; no committed source revision"
+        }
+      ]
+    }
+  ]
+}

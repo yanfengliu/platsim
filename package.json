@@ -1,0 +1,19 @@
+{
+  "name": "mosslight",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small illustrated colony survival simulation built with Godot.",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "check": "node mosslight/tools/godot.mjs import",
+    "test": "node mosslight/tools/godot.mjs test",
+    "build": "node mosslight/tools/godot.mjs export-web",
+    "dev": "node mosslight/tools/serve.mjs",
+    "export:windows": "node mosslight/tools/godot.mjs export-windows",
+    "export:macos": "node mosslight/tools/godot.mjs export-macos"
+  },
+  "license": "MIT"
+}
