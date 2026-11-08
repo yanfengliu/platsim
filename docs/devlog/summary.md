@@ -1,5 +1,7 @@
 # Devlog Summary
 
+- 2026-11-07: **Bound rendering load after a reported system freeze** — Added an explicit 60 FPS application limit and regression coverage for repeated scene, settings and terrain-cache lifecycles. Investigated Windows records and added a timed headless memory diagnostic. The shutdown's cause remains unproven; this cap is a mitigation, and native GPU reproduction was deliberately avoided.
+
 - 2026-11-07: **A new pixel-art world** — Replaced the painted scenery with original layered pixel caves, slate terrain, copper workshop props and angular explorers. Nearest sampling, square UI frames and stepped lighting unify the style while preserving smooth movement and the articulated digging rig. Buildings now have believable multi-tile footprints with complete previews, foundation checks and cancellation. A tiered Build menu replaces permanent number keys for each object. The README image and playable builds follow the new style.
 
 - 2026-11-07: **Current gameplay in the README** — Added a real colony screenshot and a reproducible keyboard/mouse capture recipe. Local checks and CI require refreshing it after game, scene, settings or artwork changes; documentation and tests do not invalidate it.

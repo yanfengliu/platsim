@@ -1,5 +1,13 @@
 # Defect register
 
+## ML-S1 - Whole-PC freeze shortly after Windows launch (2026-11-07)
+
+**Reported symptom:** The game appeared, then the entire Windows PC froze or restarted within seconds. Earlier short frame-time checks did not test standalone exported GPU startup or sustained memory use.
+
+**Evidence and scope:** Windows recorded an unclean restart with no bug-check code; scoped searches found no current crash dump, Godot application-crash event or resource-exhaustion event. This does not identify the cause or exclude a driver-side failure. Static review found finite loops and retained cache lifetimes, but the application had no explicit frame limit and could draw around 200 FPS on the earlier test machine. A 60 FPS application cap reduces unnecessary rendering while preserving VSync and interpolated animation. This is a load mitigation, not a confirmed repair for the system freeze.
+
+**Whole-class regression:** The runtime stability suite checks the effective frame limit on engine startup and repeatedly exercises full scene destruction, menu replacement, UI scaling, new-colony resets and dimension-dependent terrain replacement. It checks retired node identities, warmed node/object counts and exact cache pixel budgets. Its optional timed headless soak uses the normal production frame loop and reports tracked memory/counts with bounded-growth assertions. An external watchdog bounds duration and process private memory. Headless checks and software WebGL capture do not establish native GPU-driver stability. Evidence and remaining limits are recorded in work 4.
+
 ## ML-V2 - Object proportions and flat build controls do not scale (2026-11-07)
 
 **Reported symptom:** Furniture and machinery looked implausibly tiny or oversized, and permanently numbered buttons for every object would not scale with the catalog.
