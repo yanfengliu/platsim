@@ -38,3 +38,7 @@ RTX4090 native timing averages177.9fps at1x and174.1fps at3x; p99 intervals are1
 ## Final exported artifacts
 
 Final Windows, web and Mac exports passed, with Windows SHA256 cc0dad5295c18719cefc8f727bd56ccf831fc7ca64f7a502529d0c5d166507d4, web PCK cc1015904b857ab29c6545ce766851aa6dc111713d39885c9a1aa3ce84176e4c and Mac ZIP 53e64fdbb16f51ff85c62bfcafdda7e04085f00206d82b8fd37854eae116c074. Final Windows headless startup exits normally with no errors. Both final Windows and web packs differ from their reviewed candidates only at four generated root scene ID bytes; all other thirty resources, all seven compiled scripts and decoded node properties match. This supports carrying the bounded candidate evidence forward, without claiming byte-identical artifacts or a new native timing run. The independent migration review in reviews/0_implementation.md closes with no blockers. All task-owned export processes exited.
+
+## Delivered repository boundary
+
+Implementation ce4950ed2aaab1b07113e5f603ab6bb32487e439 is on platsim/main with successful Mosslight CI run42445061341. Platformer main and all advertised refs now resolve to the clean54e0a270a65a5d92cd444e4ecbc4e23acbc83eac; its new Game checks run42445149081 passes. Local all-ref history no longer contains the Mosslight paths after task-branch cleanup. The complete pre-rewrite bundle and current source patch remain only as recovery evidence in ignored platsim output. No platformer force push beyond the explicitly authorized expected-tip update was made.

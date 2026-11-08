@@ -1,6 +1,6 @@
 # Move Mosslight to platsim and correct digging poses
 
-Status: active
+Status: complete
 Owner: Codex integration owner
 Created: 2026-11-07
 Updated: 2026-11-07
@@ -35,4 +35,8 @@ The source worktree's uncommitted pose review is preserved exactly at [historica
 
 ## Outcome
 
-Integration and independent review are complete. Historical work units retain exact source bytes and provenance, all 864 Godot checks pass, final desktop/web exports pass, and final Windows startup succeeds. The reviewed candidate and migrated runtime resources are equivalent apart from generated scene identity. Remote delivery, post-push CI, guarded platformer restoration and final cleanup remain active.
+Delivered implementation ce4950ed2aaab1b07113e5f603ab6bb32487e439 to platsim/main; [Mosslight CI](https://github.com/yanfengliu/platsim/actions/runs/42445061341) passed all 864 Godot checks. The six extracted historical commits are ancestors of that merge, and the independent migration review closes with no blockers. Final Windows, Mac and web builds plus verification evidence are retained under the primary platsim output directory; Windows headless startup passed, and Mac execution remains untested.
+
+Restored platformer/main locally and remotely to 54e0a270a65a5d92cd444e4ecbc4e23acbc83eac with the exact expected-old-tip force-with-lease. Its 108 local tests and [Game checks CI](https://github.com/yanfengliu/platformer/actions/runs/42445149081) pass. All advertised refs are clean; git log --all for the misplaced Mosslight paths returns no commits after removing the task branch. The unrelated Emberwake files are unchanged. Recovery bundles, source patch, original artwork and evidence live in ignored platsim output, outside platformer refs. Existing hosting caches or old local reflogs are not claimed to be erased.
+
+The old pose and verification worktrees and their branches were removed after verifying retained source and evidence. The old app checkout is clean at the restored revision; the app refused archiving it because another active chat still uses it, so it remains untouched after restoration. This chat belongs to the platsim project and keeps its managed platsim checkout. No task-owned browser, GUI or server remains. Temporary history-import storage was removed. The final record update changes documentation only; source and artifact hashes remain those accepted by review 0.
