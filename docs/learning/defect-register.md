@@ -10,6 +10,8 @@
 
 **Native follow-up (work 5):** An empty protected-directory search was initially interpreted too strongly because access errors were suppressed. LiveKernelReports and WER contents are unavailable to the non-administrator token; absence of a current dump is not established. Earlier successful native observer runs disabled persistent shader caching through a directory error, so they did not cover the normal cache-loading path. Offline parsing of all five preserved cache containers found valid bounds and matching counts/hashes; opaque driver binaries remain untested. Native cache color plus depth/stencil attachments total about 94.5 MiB before other resources, rather than the 47.3 MiB color-only figure. No causal fix is established, and the workstation graphics path remains unused during this follow-up.
 
+**Protected collection (2026-11-08):** The owner-approved administrator collector successfully read those folders, with zero errors or budget skips. It found only historical dumps and 44 historical WER reports; none has an incident-time EventTime. Recently modified report files describe older events. Additional saved-log and configured-dump-location checks supplied no incident stack or responsible module. A corrected WHEA record after reboot is not evidence of a pre-freeze failure. Diagnosis remains blocked on incident evidence or separate matching-hardware reproduction; no native launch or speculative causal fix was performed.
+
 ## ML-V2 - Object proportions and flat build controls do not scale (2026-11-07)
 
 **Reported symptom:** Furniture and machinery looked implausibly tiny or oversized, and permanently numbered buttons for every object would not scale with the catalog.
