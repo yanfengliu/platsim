@@ -1,6 +1,6 @@
 # Investigate Windows system freeze and bound runtime load
 
-Status: active
+Status: complete
 Owner: Codex integration owner
 Created: 2026-11-07
 Updated: 2026-11-07
@@ -47,4 +47,8 @@ Windows event interpretation follows [Microsoft's Event 41 guidance](https://lea
 
 Final local gates pass: README freshness/import and 2,024 checks across seven suites (569 simulation, 291 motion, 403 UI, 62 terrain, 157 digging, 70 pixel art, 472 runtime stability). The additional timed run passes 534 checks. Both independent review findings are closed in review 1. The standalone release executable exits normally after 120 supported headless iterations; a matching headless engine separately loads that exact exported pack, verifies its effective max_fps=60 and advances the production scene for two simulation seconds. The initial release smoke timed out because release CLI help omits the editor-only --script flag; it did not execute the observer. That failed harness attempt is preserved and superseded by these supported checks, not interpreted as a demonstrated game hang.
 
-The original reported Windows artifact SHA256 is 7f19f971a4bd37443f544b118242939ab7372ae578ea6aa5e5188925dd239baf. The capped Windows export is 6da7b0a654cac5dc299e796977dfd45822d4cba345f8149bdcca70f9f8282dcb; macOS archive is 6c14e859092b8bea34c62d6d17d8ff40139b36c131e72cc0f4c5ce1e9f35565b. These are mitigated builds, not certified crash fixes. The README image represents the same capped source. Delivery/CI closure follows the code commit.
+The original reported Windows artifact SHA256 is 7f19f971a4bd37443f544b118242939ab7372ae578ea6aa5e5188925dd239baf. The capped Windows export is 6da7b0a654cac5dc299e796977dfd45822d4cba345f8149bdcca70f9f8282dcb; macOS archive is 6c14e859092b8bea34c62d6d17d8ff40139b36c131e72cc0f4c5ce1e9f35565b. These are mitigated builds, not certified crash fixes. The README image represents the same capped source. Code delivery and CI closure are recorded below.
+
+The bounded diagnostic and mitigation work is complete in code commit d110aebd77ef054dfca94986e8947eede91ff5e5, merged to platsim/main and pushed. [GitHub CI 42453711556](https://github.com/yanfengliu/platsim/actions/runs/42453711556) completed successfully, including capture/import, all seven suites and runtime cleanup. This completion does not resolve the reported system freeze: native GPU stability, GPU memory behavior and the incident cause remain unproven.
+
+Current Windows/macOS/web artifacts, the gameplay image, PLAY.md and delivery.json are under the primary checkout's output/mosslight. Raw diagnosis, failed/corrected measurements, exact review targets, process audit and CPU-only browser capture are deliberately retained under C:/Users/38909/Documents/github/platsim/output/mosslight-stability/evidence; paths above beginning output/crash-diagnostics now map to evidence/crash-diagnostics, and software-capture retains the browser evidence. The reported original executable is retained there as Mosslight-before-fps-cap.exe. Copied evidence and exports are hash-verified before redundant worktree outputs are removed. No task-owned game, browser or localhost server remains. The app-managed worktree is retained as this chat's project location, detached at delivered main; the completed task branch is removed.
