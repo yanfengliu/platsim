@@ -123,6 +123,10 @@
           "source": "Uncommitted source review in platformer pose worktree at C:/Users/38909/Documents/github/platformer/.worktrees/mosslight-pose/docs/work/8_mosslight-motion/reviews/7_implementation.md; recorded SHA256 d5915bb6f2010b7a07ce96c92c41c2560f27c6f0a2534842374e6456ab1d2041; no committed source revision"
         }
       ]
+    },
+    {
+      "id": 3,
+      "theme": "pixel-art"
     }
   ]
 }

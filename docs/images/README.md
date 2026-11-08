@@ -1,6 +1,6 @@
 # Keeping the gameplay image current
 
-The root README uses `gameplay.jpg`. Show the current game at its best: readable resource controls, the illustrated cave, settlers, buildings and active work. Use an actual rendered game capture. Keep it at least 960 x 540 and below 512 KiB; 1440 x 900 JPEG at quality 85 works well. Inspect the full image before accepting it, and revise the scene or framing as the game evolves.
+The root README uses `gameplay.jpg`. Show the current game at its best: readable resource controls, the pixel-art cave, settlers, buildings and active work. Use an actual rendered game capture. Keep it at least 960 x 540 and below 512 KiB; 1440 x 900 JPEG at quality 85 works well. Inspect the full image before accepting it, and revise the scene or framing as the game evolves.
 
 `gameplay.json` binds the image bytes to a digest of the game source, scenes, project/export settings and artwork. Text line endings are normalized across Windows and CI. Tests, tooling, documentation and generated caches are excluded. `npm run readme:check`, included in `npm run check` and CI, fails if either the source or image no longer matches. It checks freshness, not visual quality; maintainers still inspect the capture. Do not update the manifest without taking a new picture of the current build.
 

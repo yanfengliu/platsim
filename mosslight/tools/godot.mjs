@@ -103,7 +103,7 @@ async function exportProject(kind) {
 }
 
 async function testProject() {
-  for (const test of ['simulation_test.gd', 'presentation_motion_test.gd', 'ui_settings_test.gd', 'terrain_cache_test.gd', 'digging_animation_test.gd']) {
+  for (const test of ['simulation_test.gd', 'presentation_motion_test.gd', 'ui_settings_test.gd', 'terrain_cache_test.gd', 'digging_animation_test.gd', 'pixel_art_test.gd']) {
     await run(['--headless', '--path', project, '--script', `res://tests/${test}`]);
   }
 }

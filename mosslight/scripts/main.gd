@@ -3,13 +3,15 @@ extends Control
 const Simulation = preload("res://scripts/simulation.gd")
 const WorldView = preload("res://scripts/world_view.gd")
 const UISettings = preload("res://scripts/ui_settings.gd")
-const MINT := Color("9fe6bd")
-const TEXT := Color("dce8d9")
-const MUTED := Color("89a59e")
+const MINT := Color("9ed9be")
+const TEXT := Color("e4e6ed")
+const MUTED := Color("929db5")
 const GOLD := Color("ecc585")
-const TOOLS := ["inspect", "dig", "ladder", "bed", "farm", "airfern", "lamp", "generator", "cistern", "beacon", "cancel"]
+const BUILD_CATEGORIES := ["access", "furniture", "life_support", "power"]
+const CATEGORY_NAMES := {"access": "Access", "furniture": "Furniture", "life_support": "Life support", "power": "Power"}
+const CATEGORY_ITEMS := {"access": ["ladder"], "furniture": ["bed"], "life_support": ["farm", "airfern", "cistern"], "power": ["lamp", "generator", "beacon"]}
 const SHORT_NAMES := {"inspect": "Inspect", "dig": "Dig", "ladder": "Ladder", "bed": "Cot", "farm": "Mushrooms", "airfern": "Airfern", "lamp": "Lamp", "generator": "Generator", "cistern": "Cistern", "beacon": "Beacon", "cancel": "Cancel job"}
-const SHORTCUTS := {"inspect": "0", "dig": "1", "ladder": "2", "bed": "3", "farm": "4", "airfern": "5", "lamp": "6", "generator": "7", "cistern": "8", "beacon": "9", "cancel": "X"}
+const SHORTCUTS := {"inspect": "0", "dig": "1", "cancel": "X"}
 const DESCRIPTIONS := {"ladder": "Connect levels so settlers can reach jobs.", "bed": "A place for one settler to rest.", "farm": "Needs light + water. Grows food.", "airfern": "Needs light + water. Refreshes room air.", "lamp": "Lights plants within 5 tiles. Uses power.", "generator": "Burns biomass to produce power.", "cistern": "Collects renewable water from the cave.", "beacon": "Keep it powered while the colony thrives."}
 var simulation: RefCounted
 var world: Control
@@ -38,6 +40,7 @@ var _objective_bar: ProgressBar
 var _crew_label: Label
 var _tool_title: Label
 var _tool_description: Label
+var _details_scroll: ScrollContainer
 var _feedback: Label
 var _inspection: Label
 var _world_hint: Label
@@ -58,6 +61,15 @@ var _status_row: HBoxContainer
 var _tools_panel: PanelContainer
 var _tools_grid: GridContainer
 var _tools_scroll: ScrollContainer
+var _build_button: Button
+var _build_browser: VBoxContainer
+var _build_grid: GridContainer
+var _build_heading: Label
+var _build_back: Button
+var _build_path: Button
+var _category_buttons := {}
+var _build_menu_open := false
+var _build_category := ""
 var _play_area: HBoxContainer
 var _sidebar: VBoxContainer
 var _desktop_layout := false
@@ -103,18 +115,20 @@ func _build_theme() -> void:
 	skin.set_color("font_hover_color", "Button", Color("f2f5d8"))
 	skin.set_color("font_pressed_color", "Button", Color("071e21"))
 	skin.set_color("font_focus_color", "Button", Color("f2f5d8"))
-	skin.set_stylebox("normal", "Button", _panel(Color("17343a"), Color("36524e"), 7, 10))
-	skin.set_stylebox("hover", "Button", _panel(Color("244a48"), Color("81b995"), 7, 10))
+	skin.set_stylebox("normal", "Button", _panel(Color("242b42"), Color("4a526c"), 7, 10))
+	skin.set_stylebox("hover", "Button", _panel(Color("344159"), Color("81b995"), 7, 10))
 	skin.set_stylebox("pressed", "Button", _panel(Color("91cda8"), MINT, 7, 10))
 	skin.set_stylebox("focus", "Button", _panel(Color(0, 0, 0, 0), GOLD, 7, 0, 2))
-	skin.set_stylebox("disabled", "Button", _panel(Color("15292e"), Color("243c3e"), 7, 10))
-	skin.set_stylebox("panel", "PanelContainer", _panel(Color("10282e"), Color("28453f"), 10, 14))
+	skin.set_stylebox("disabled", "Button", _panel(Color("1c2133"), Color("30384e"), 7, 10))
+	skin.set_stylebox("panel", "PanelContainer", _panel(Color("1c2338"), Color("414b64"), 10, 14))
 	skin.set_stylebox("background", "ProgressBar", _panel(Color("1b383b"), Color("1b383b"), 3, 0))
 	skin.set_stylebox("fill", "ProgressBar", _panel(Color("77bc92"), Color("77bc92"), 3, 0))
 	theme = skin
 
 func _panel(fill: Color, border: Color, radius: int, padding: int, border_width: int = 1) -> StyleBoxFlat:
+	radius = mini(radius, 2)
 	var box := StyleBoxFlat.new()
+	box.anti_aliasing = false
 	box.bg_color = fill
 	box.border_color = border
 	box.set_border_width_all(_px(border_width))
@@ -186,7 +200,7 @@ func _build_interface() -> void:
 	_layout.add_child(_resource_grid)
 	for item in [["food", "FOOD", Color("e8bd83")], ["water", "WATER", Color("86c6d0")], ["air", "AIR", Color("9fe6bd")], ["power", "POWER", Color("e9d28d")], ["ore", "STONE", Color("c3bbb1")], ["biomass", "BIOMASS", Color("b1cd8a")]]:
 		var panel := PanelContainer.new()
-		panel.add_theme_stylebox_override("panel", _panel(Color("10282e"), Color("243e40"), 7, 7))
+		panel.add_theme_stylebox_override("panel", _panel(Color("1c2338"), Color("243e40"), 7, 7))
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_resource_grid.add_child(panel)
 		var row := HBoxContainer.new()
@@ -259,7 +273,7 @@ func _build_interface() -> void:
 	_crew_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_status_row.add_child(_crew_label)
 	_tools_panel = PanelContainer.new()
-	_tools_panel.add_theme_stylebox_override("panel", _panel(Color("10282e"), Color("29473f"), 9, 9))
+	_tools_panel.add_theme_stylebox_override("panel", _panel(Color("1c2338"), Color("29473f"), 9, 9))
 	_layout.add_child(_tools_panel)
 	var tools_column := VBoxContainer.new()
 	tools_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -270,44 +284,100 @@ func _build_interface() -> void:
 	_tool_title = _label("MAKE YOURSELF AT HOME", 11, MINT)
 	_tool_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(_tool_title)
-	var legend := _label("0–9 tools · Space pause", 11, MUTED)
+	var legend := _label("B Build | Space pause", 11, MUTED)
 	legend.name = "ToolLegend"
 	title_row.add_child(legend)
 	_details_button = _button("Info", func(): _details_open = not _details_open; _responsive_layout(), "details")
 	_details_button.custom_minimum_size.y = _px(32)
 	title_row.add_child(_details_button)
-	var scroll := ScrollContainer.new()
-	_tools_scroll = scroll
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.follow_focus = true
-	scroll.custom_minimum_size.y = _px(56)
-	tools_column.add_child(scroll)
 	_tools_grid = GridContainer.new()
-	_tools_grid.columns = TOOLS.size()
+	_tools_grid.columns = 4
 	_tools_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_tools_grid.add_theme_constant_override("separation", _px(6))
-	_tools_grid.add_theme_constant_override("h_separation", _px(6))
-	_tools_grid.add_theme_constant_override("v_separation", _px(6))
-	scroll.add_child(_tools_grid)
-	for kind in TOOLS:
-		var button := _button(SHORTCUTS[kind] + "  " + SHORT_NAMES[kind], func(): _select_tool(kind), "tool_" + kind)
-		button.custom_minimum_size = Vector2(_px(98), _px(48))
+	_tools_grid.add_theme_constant_override("h_separation", _px(4))
+	_tools_grid.add_theme_constant_override("v_separation", _px(4))
+	tools_column.add_child(_tools_grid)
+	for kind in ["inspect", "dig", "build", "cancel"]:
+		var button: Button
+		if kind == "build":
+			button = _button("Build", _open_build_menu, "build")
+			_build_button = button
+			button.tooltip_text = "Build (B) · Choose a category, then an item."
+		else:
+			button = _button("Cancel" if kind == "cancel" else SHORT_NAMES[kind], func(): _select_tool(kind), "tool_" + kind)
+			button.tooltip_text = "%s (%s)" % [SHORT_NAMES[kind], SHORTCUTS[kind]]
+			_tool_buttons[kind] = button
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.add_theme_font_size_override("font_size", _px(13))
 		button.toggle_mode = true
-		button.button_pressed = kind == "inspect"
+		button.button_pressed = kind == selected_tool
 		_tools_grid.add_child(button)
-		_tool_buttons[kind] = button
+	_build_path = _button("", func(): _open_build_menu(_build_category), "build_path")
+	_build_path.add_theme_font_size_override("font_size", _px(12))
+	_build_path.custom_minimum_size.y = _px(44)
+	tools_column.add_child(_build_path)
+	_build_browser = VBoxContainer.new()
+	_build_browser.add_theme_constant_override("separation", _px(5))
+	tools_column.add_child(_build_browser)
+	var browse_header := HBoxContainer.new()
+	_build_browser.add_child(browse_header)
+	_build_back = _button("Back", _back_build_menu, "build_back")
+	_build_back.custom_minimum_size.y = _px(30)
+	browse_header.add_child(_build_back)
+	_build_heading = _label("BUILD / CATEGORIES", 11, MINT)
+	_build_heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_build_heading.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	browse_header.add_child(_build_heading)
+	_tools_scroll = ScrollContainer.new()
+	_tools_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_tools_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_tools_scroll.follow_focus = true
+	_tools_scroll.custom_minimum_size.y = _px(112)
+	_build_browser.add_child(_tools_scroll)
+	_build_grid = GridContainer.new()
+	_build_grid.columns = 2
+	_build_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_build_grid.add_theme_constant_override("h_separation", _px(5))
+	_build_grid.add_theme_constant_override("v_separation", _px(5))
+	_tools_scroll.add_child(_build_grid)
+	for category in BUILD_CATEGORIES:
+		var category_button := _button(CATEGORY_NAMES[category], func(): _show_build_category(category), "category_" + category)
+		category_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		category_button.custom_minimum_size.y = _px(52)
+		category_button.add_theme_font_size_override("font_size", _px(13))
+		_build_grid.add_child(category_button)
+		_category_buttons[category] = category_button
+		for kind in CATEGORY_ITEMS[category]:
+			var dimensions: Vector2i = simulation.building_size(kind)
+			var button := _button("%s · %dx%d\n%s" % [SHORT_NAMES[kind], dimensions.x, dimensions.y, _cost_text(Simulation.CATALOG[kind].cost).replace(", ", "\n")], func(): _select_tool(kind), "tool_" + kind)
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			button.custom_minimum_size.y = _px(68 if Simulation.CATALOG[kind].cost.size() > 1 else 52)
+			button.add_theme_font_size_override("font_size", _px(12))
+			button.tooltip_text = DESCRIPTIONS[kind]
+			button.toggle_mode = true
+			_build_grid.add_child(button)
+			_tool_buttons[kind] = button
+	_render_build_menu()
+	_details_scroll = ScrollContainer.new()
+	_details_scroll.name = "ToolDetails"
+	_details_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_details_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_details_scroll.follow_focus = true
+	_details_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tools_column.add_child(_details_scroll)
+	var details_column := VBoxContainer.new()
+	details_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	details_column.add_theme_constant_override("separation", _px(5))
+	_details_scroll.add_child(details_column)
 	_tool_description = _label("Inspect · Click a colonist, building or cave tile to learn about it.", 13, TEXT)
 	_tool_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_tool_description.custom_minimum_size.y = _px(30)
 	_tool_description.max_lines_visible = 3
-	tools_column.add_child(_tool_description)
+	details_column.add_child(_tool_description)
 	_inspection = _label("Tip: extend the lower root ladder to reach the quarry.", 12, MUTED)
 	_inspection.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_inspection.custom_minimum_size.y = _px(28)
 	_inspection.max_lines_visible = 2
-	tools_column.add_child(_inspection)
+	details_column.add_child(_inspection)
 	_feedback = _label("Welcome to the First Hollow.", 12, GOLD)
 	_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_feedback.custom_minimum_size.y = _px(18)
@@ -330,13 +400,15 @@ func _responsive_layout() -> void:
 	if not is_equal_approx(target_scale, _ui_scale) and not _scale_rebuild_pending:
 		_scale_rebuild_pending = true
 		call_deferred("_rebuild_scaled_interface")
-	var layout_state := [size, _ui_scale, _details_open, paused, _overlay_kind, _world_frame.size.x]
+	var layout_state := [size, _ui_scale, _details_open, paused, _overlay_kind, _world_frame.size.x, _build_menu_open, _build_category]
 	if layout_state == _last_layout_state:
 		return
 	_last_layout_state = layout_state
 	_compact = size.x < _px(580)
 	var desktop := size.x >= maxf(1000, _px(750)) and size.y >= 650
 	if desktop != _desktop_layout:
+		var layout_focus := get_viewport().gui_get_focus_owner()
+		var layout_focus_name := str(layout_focus.name) if is_instance_valid(layout_focus) else ""
 		_desktop_layout = desktop
 		if desktop:
 			_world_frame.reparent(_play_area)
@@ -353,24 +425,33 @@ func _responsive_layout() -> void:
 			_layout.move_child(_tools_panel, 4)
 			_layout.move_child(_feedback, 5)
 		_play_area.visible = desktop
-		_tools_grid.columns = 2 if desktop else TOOLS.size()
-		_tools_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if desktop else ScrollContainer.SCROLL_MODE_AUTO
-		_tools_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO if desktop else ScrollContainer.SCROLL_MODE_DISABLED
-		_tools_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL if desktop else Control.SIZE_FILL
+		_restore_focus(layout_focus_name)
+		_tools_grid.columns = 2 if desktop else 4
 		_tools_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL if desktop else Control.SIZE_FILL
-	_tool_description.visible = desktop or _details_open
-	_inspection.visible = desktop or _details_open
-	_details_button.visible = not desktop
+	_build_browser.size_flags_vertical = Control.SIZE_EXPAND_FILL if desktop else Control.SIZE_FILL
+	_tools_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL if desktop else Control.SIZE_FILL
+	# Scrollable content must not impose its text or catalog height on the map.
+	# Desktop columns share a fixed available height; compact tools reserve a
+	# small viewport while leaving the rest to the world.
+	_tools_scroll.custom_minimum_size.y = 0 if desktop else _px(80)
+	_details_scroll.visible = not _build_menu_open and (desktop or _details_open)
+	_details_scroll.custom_minimum_size.y = 0 if desktop else _px(80)
+	_details_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL if desktop else Control.SIZE_FILL
+	_tool_description.visible = true
+	_inspection.visible = true
+	_details_button.visible = not desktop and not _build_menu_open
 	_details_button.text = "Less" if _details_open else "Info"
-	_tool_description.max_lines_visible = 5 if desktop else 3
-	_inspection.max_lines_visible = 5 if desktop else 2
-	_feedback.max_lines_visible = 4 if desktop else 2
-	var padding := _px(10 if _compact else 20)
+	_tool_description.max_lines_visible = -1
+	_inspection.max_lines_visible = -1
+	_feedback.max_lines_visible = 2
+	var short_window := size.y < _px(650)
+	_world_frame.custom_minimum_size.y = 80 if not desktop and (_build_menu_open or _details_open) else 140
+	var padding := _px(10 if _compact or short_window else 20)
 	for side in ["left", "right", "top", "bottom"]:
 		_root_margin.add_theme_constant_override("margin_" + side, padding)
-	_layout.add_theme_constant_override("separation", _px(7 if _compact else 10))
+	_layout.add_theme_constant_override("separation", _px(7 if _compact or short_window else 10))
 	_brand.add_theme_font_size_override("font_size", _px(20 if _compact else 27))
-	_subtitle.visible = not _compact
+	_subtitle.visible = not _compact and not short_window
 	_resource_grid.columns = 3 if size.x < _px(680) else 6
 	_crew_label.visible = false
 	_world_hint.visible = _world_frame.size.x >= _px(600)
@@ -402,6 +483,8 @@ func _rebuild_scaled_interface() -> void:
 	var focus_name := str(focus_owner.name) if is_instance_valid(focus_owner) else "World"
 	var modal := _overlay_kind
 	var details := _details_open
+	var browsing := _build_menu_open
+	var category := _build_category
 	var feedback_text := _feedback.text
 	# Recreate native UI metrics, keeping the same world and simulation instances.
 	# Its camera, zoom, motion state and physical coordinate mapping are untouched.
@@ -410,6 +493,7 @@ func _rebuild_scaled_interface() -> void:
 	_root_margin.queue_free()
 	_controls.clear()
 	_tool_buttons.clear()
+	_category_buttons.clear()
 	_resource_labels.clear()
 	_ui_scale = next_scale
 	_desktop_layout = false
@@ -417,6 +501,9 @@ func _rebuild_scaled_interface() -> void:
 	_build_theme()
 	_build_interface()
 	_select_tool(selected_tool)
+	_build_menu_open = browsing
+	_build_category = category
+	_render_build_menu()
 	_details_open = details
 	_feedback.text = feedback_text
 	_set_speed(speed)
@@ -494,12 +581,79 @@ func _refresh() -> void:
 		_update_inspection()
 	_responsive_layout()
 
+func _category_for(kind: String) -> String:
+	for category in BUILD_CATEGORIES:
+		if kind in CATEGORY_ITEMS[category]:
+			return category
+	return ""
+
+func _render_build_menu() -> void:
+	_build_browser.visible = _build_menu_open
+	_tool_title.text = "BUILD YOUR COLONY" if _build_menu_open else "SELECTED: " + str(SHORT_NAMES[selected_tool]).to_upper()
+	for kind in ["inspect", "dig", "cancel"]:
+		_tool_buttons[kind].button_pressed = not _build_menu_open and selected_tool == kind
+	_build_path.visible = not _build_menu_open and Simulation.CATALOG.has(selected_tool)
+	_build_button.button_pressed = _build_menu_open or Simulation.CATALOG.has(selected_tool)
+	_build_heading.text = "BUILD / " + ("CATEGORIES" if _build_category == "" else str(CATEGORY_NAMES[_build_category]).to_upper())
+	_build_back.text = "Close" if _build_category == "" else "Back"
+	for category in _category_buttons:
+		_category_buttons[category].visible = _build_menu_open and _build_category == ""
+	for kind in Simulation.CATALOG:
+		_tool_buttons[kind].visible = _build_menu_open and kind in CATEGORY_ITEMS.get(_build_category, [])
+	if _build_path.visible:
+		var dimensions: Vector2i = simulation.building_size(selected_tool)
+		_build_path.text = "%s > %s · %dx%d\n%s · Change" % [CATEGORY_NAMES[_category_for(selected_tool)], SHORT_NAMES[selected_tool], dimensions.x, dimensions.y, _cost_text(Simulation.CATALOG[selected_tool].cost)]
+		_build_path.tooltip_text = "Choose another item in " + str(CATEGORY_NAMES[_category_for(selected_tool)])
+
+func _open_build_menu(category: String = "") -> void:
+	_select_tool("inspect")
+	_build_menu_open = true
+	_build_category = category
+	_details_open = false
+	_render_build_menu()
+	_tools_scroll.scroll_vertical = 0
+	_responsive_layout()
+	_focus_build_choices()
+	_publish_snapshot()
+
+func _show_build_category(category: String) -> void:
+	_build_category = category
+	_render_build_menu()
+	_tools_scroll.scroll_vertical = 0
+	_focus_build_choices()
+	_publish_snapshot()
+
+func _focus_build_choices() -> void:
+	if _build_category == "":
+		_category_buttons[BUILD_CATEGORIES.front()].grab_focus()
+	else:
+		_tool_buttons[CATEGORY_ITEMS[_build_category].front()].grab_focus()
+
+func _back_build_menu() -> void:
+	if _build_category != "":
+		var previous := _build_category
+		_build_category = ""
+		_render_build_menu()
+		_tools_scroll.scroll_vertical = 0
+		_category_buttons[previous].grab_focus()
+	else:
+		_build_menu_open = false
+		_render_build_menu()
+		_responsive_layout()
+		_build_button.grab_focus()
+	_publish_snapshot()
+
 func _select_tool(kind: String) -> void:
 	world.clear_pointer_state()
 	selected_tool = kind
 	world.selected_tool = kind
-	if kind != "inspect":
+	_build_menu_open = false
+	if Simulation.CATALOG.has(kind):
+		_build_category = _category_for(kind)
+		_details_open = false
+	elif kind != "inspect":
 		_details_open = true
+	_render_build_menu()
 	for key in _tool_buttons:
 		_tool_buttons[key].button_pressed = key == kind
 	if kind == "inspect":
@@ -510,7 +664,8 @@ func _select_tool(kind: String) -> void:
 		_tool_description.text = "Cancel job · Click a planned job. Reserved construction materials return to storage."
 	else:
 		var entry: Dictionary = Simulation.CATALOG[kind]
-		_tool_description.text = "%s · %s\n%s" % [SHORT_NAMES[kind], _cost_text(entry.cost), DESCRIPTIONS[kind]]
+		var dimensions: Vector2i = simulation.building_size(kind)
+		_tool_description.text = "%s · %d x %d tiles · %s\n%s Place by its bottom-left tile." % [SHORT_NAMES[kind], dimensions.x, dimensions.y, _cost_text(entry.cost), DESCRIPTIONS[kind]]
 		_tool_description.tooltip_text = str(entry.description)
 	_tool_title.text = "SELECTED: " + str(SHORT_NAMES[kind]).to_upper()
 	_update_inspection()
@@ -654,22 +809,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_select_tool("inspect")
 		KEY_1:
 			_select_tool("dig")
-		KEY_2:
-			_select_tool("ladder")
-		KEY_3:
-			_select_tool("bed")
-		KEY_4:
-			_select_tool("farm")
-		KEY_5:
-			_select_tool("airfern")
-		KEY_6:
-			_select_tool("lamp")
-		KEY_7:
-			_select_tool("generator")
-		KEY_8:
-			_select_tool("cistern")
-		KEY_9:
-			_select_tool("beacon")
+		KEY_B:
+			_open_build_menu()
 		KEY_X:
 			_select_tool("cancel")
 		_:
@@ -938,7 +1079,7 @@ func _render_help() -> void:
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", _px(12))
 	scroll.add_child(body)
-	var help_label := _overlay_text(body, "PLAN, THEN WATCH\nSelect a tool and click a tile. Settlers walk to reachable jobs and do the work. Drag the Dig tool across rock to mark a tunnel.\n\nA LIVING CHAIN\nCisterns gather water. Mushrooms make food, airferns replenish air, and both need nearby light. Generators burn biomass to power lamps and your beacon.\n\nYOUR FIRST STEPS\nYour four settlers need two mushroom beds and two airferns. Place another mushroom planter just left of the generator, and an airfern just left of the glow lamp. Dig the rock beneath the lower ladder, then extend the ladder into the Root Quarry. Gather stone on the right and living roots on the left. The space between the lamp and the first mushrooms is a good home for your beacon.\n\nTHE GOAL\nSurvive five full days (20 minutes at 1x). Keep a powered beacon, healthy settlers, steady food/air/water/power production and 8 food + 10 water in reserve for two minutes. The objective tells you what is missing.\n\nGIVE THEM A WAY THROUGH\nBuild ladders to reach different levels. Inaccessible jobs wait until a route exists. Cancel a planned build to recover its reserved materials.\n\nCONTROLS\n0 Inspect · 1 Dig · 2 Ladder · 3 Cot\n4 Mushrooms · 5 Airfern · 6 Lamp\n7 Generator · 8 Cistern · 9 Beacon\nX Cancel job · Space Pause · V Air\nArrows move the tile cursor · Enter acts\nWASD or middle-drag pans · Wheel zooms\nHome centers the colony · Escape opens the menu\nTab moves between buttons.\n\nTake your time. Construction can be planned while paused. Click a building to read why it is not working. This first chapter does not save a live run.", 14, TEXT)
+	var help_label := _overlay_text(body, "PLAN, THEN WATCH\nSelect Build, choose a category and then an item. Click a tile to place its bottom-left corner. Settlers walk to reachable jobs and do the work. Drag the Dig tool across rock to mark a tunnel.\n\nA LIVING CHAIN\nCisterns gather water. Mushrooms make food, airferns replenish air, and both need nearby light. Generators burn biomass to power lamps and your beacon.\n\nYOUR FIRST STEPS\nYour four settlers need two mushroom beds and two airferns. Place another mushroom planter just right of the generator (21, 16), and an airfern just left of the glow lamp (22, 16). Dig the rock beneath the lower ladder, then extend the ladder into the Root Quarry. Gather stone on the right and living roots on the left. The open upper roost beside the cots has room for a 2-by-3 beacon (11, 6). Large buildings occupy their full footprint; place them by the bottom-left tile with solid ground beneath every column.\n\nTHE GOAL\nSurvive five full days (20 minutes at 1x). Keep a powered beacon, healthy settlers, steady food/air/water/power production and 8 food + 10 water in reserve for two minutes. The objective tells you what is missing.\n\nGIVE THEM A WAY THROUGH\nBuild ladders to reach different levels. Inaccessible jobs wait until a route exists. Cancel a planned build to recover its reserved materials.\n\nCONTROLS\n0 Inspect | 1 Dig | B Build categories\nBuild > category > item | Back returns to categories\nX Cancel job · Space Pause · V Air\nArrows move the tile cursor · Enter acts\nWASD or middle-drag pans · Wheel zooms\nHome centers the colony · Escape opens the menu\nTab moves between buttons.\n\nTake your time. Construction can be planned while paused. Click a building to read why it is not working. This first chapter does not save a live run.", 14, TEXT)
 	help_label.focus_mode = Control.FOCUS_ALL
 	var close := _button("Back", _close_help, "close_help")
 	close.custom_minimum_size.y = _px(46)
@@ -1000,6 +1141,10 @@ func _restart() -> void:
 	world.fit_colony()
 	_refresh()
 
+func _footprint_snapshot(kind: String, anchor: Vector2i) -> Dictionary:
+	var area: Rect2i = simulation.building_rect(kind, anchor)
+	return {"x": area.position.x, "y": area.position.y, "width": area.size.x, "height": area.size.y}
+
 func _publish_snapshot() -> void:
 	if not OS.has_feature("web") or not world:
 		return
@@ -1020,14 +1165,16 @@ func _publish_snapshot() -> void:
 		settlers.append({"id": colonist.id, "name": colonist.name, "x": colonist.pos.x, "y": colonist.pos.y, "health": colonist.health, "hunger": colonist.hunger, "energy": colonist.energy, "task": colonist.task, "alive": colonist.alive})
 	var buildings := []
 	for building in simulation.buildings:
-		buildings.append({"kind": building.kind, "x": building.cell.x, "y": building.cell.y, "active": building.active, "reason": building.reason})
+		buildings.append({"kind": building.kind, "x": building.cell.x, "y": building.cell.y, "active": building.active, "reason": building.reason, "footprint": _footprint_snapshot(building.kind, building.cell)})
 	var jobs := []
 	for job in simulation.jobs:
-		jobs.append({"kind": job.kind, "x": job.cell.x, "y": job.cell.y, "progress": job.progress})
+		jobs.append({"kind": job.kind, "x": job.cell.x, "y": job.cell.y, "progress": job.progress, "building_kind": job.building_kind, "footprint": _footprint_snapshot(job.building_kind, job.cell) if job.kind == "build" else {"x": job.cell.x, "y": job.cell.y, "width": 1, "height": 1}})
 	var world_rect: Rect2 = world.get_global_rect()
 	var card_rect: Rect2 = _overlay_card.get_global_rect() if is_instance_valid(_overlay_card) else Rect2()
 	var focused_control := get_viewport().gui_get_focus_owner()
 	var data := {"started": started, "paused": paused, "speed": speed, "overlay": _overlay_kind, "status": simulation.status, "elapsed": simulation.elapsed, "day": simulation.day, "resources": simulation.resources.duplicate(), "selected_tool": selected_tool, "air_overlay": world.show_air, "colonists": settlers, "buildings": buildings, "jobs": jobs, "feedback": _feedback.text, "inspection": _inspection.text, "objective": _objective.text, "objective_progress": simulation.objective_progress, "controls": controls, "cursor": {"x": world.cursor.x, "y": world.cursor.y}, "viewport": {"width": size.x, "height": size.y}, "world": {"x": world_rect.position.x, "y": world_rect.position.y, "width": world_rect.size.x, "height": world_rect.size.y, "camera_x": world.camera.x, "camera_y": world.camera.y, "tile_size": world.TILE * world.zoom_level}, "overlay_card": {"x": card_rect.position.x, "y": card_rect.position.y, "width": card_rect.size.x, "height": card_rect.size.y}, "title_inner": {"x": card_rect.position.x + 1, "y": card_rect.position.y + 1, "width": card_rect.size.x - 2, "height": card_rect.size.y - 2}}
+	var build_scroll_rect := _tools_scroll.get_global_rect()
+	data["build_menu"] = {"scroll": {"x": build_scroll_rect.position.x, "y": build_scroll_rect.position.y, "width": build_scroll_rect.size.x, "height": build_scroll_rect.size.y}, "open": _build_menu_open, "category": _build_category, "path": ["Build", CATEGORY_NAMES[_build_category]] if _build_category != "" else ["Build"]}
 	data["focused_control"] = str(focused_control.name) if is_instance_valid(focused_control) else ""
 	data["pointer_state"] = {"dig_drag": world._dig_drag, "pan_drag": world._dragging}
 	data["ui_scale"] = {"requested": _ui_settings.requested_percent, "applied": roundi(_ui_scale * 100), "maximum": _ui_settings.maximum_percent(size), "description": _ui_settings.description(size)}

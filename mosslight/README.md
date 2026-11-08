@@ -1,6 +1,6 @@
 # Mosslight
 
-A small colony in a living cavern. Mark rock to dig, give four survivors construction jobs, and grow a habitat around food, breathable air, and power. This is the first playable prototype, maintained in the dedicated `yanfengliu/platsim` repository.
+A small pixel-art colony in a living cavern. Mark rock to dig, give four survivors construction jobs, and grow a habitat around food, breathable air, and power. This is the first playable prototype, maintained in the dedicated `yanfengliu/platsim` repository.
 
 ## Open in Godot
 
@@ -12,17 +12,16 @@ The editor and exported game support Windows, Linux, and macOS. The macOS export
 
 Choose **Enter the hollow** on the title screen. Dig into the cave, provide lit growing spaces, and keep supplies coming while working toward the beacon objective. Hover or select a tile to inspect it; buildings explain missing resources and inactive conditions. Complete the chapter by surviving five days (20 minutes at 1x, about seven at 3x), with healthy surviving settlers, renewable food and water, healthy air, and a powered beacon maintained for two minutes. Generator fuel still needs gathering from deposits; the chapter objective does not promise endless power.
 
-The on-screen help lists the current keyboard and mouse controls. Space pauses; 1x and 3x buttons change speed; the air overlay explains room conditions. Construction costs are shown before placement. A new expedition starts a fresh colony. Live-game saving is outside this first prototype's scope.
+The on-screen help lists the current keyboard and mouse controls. Space pauses; 1x and 3x buttons change speed; the air overlay explains room conditions. Build opens Access, Furniture, Life support, and Power categories. Item buttons show footprint sizes and construction costs before placement. Buildings use their bottom-left tile as the placement anchor; their entire highlighted area must be clear and every foundation column supported. Beds span 2x1 tiles, generators and cisterns 2x2, beacons 2x3, and lamps and airferns 1x2. A new expedition starts a fresh colony. Live-game saving is outside this first prototype's scope.
 
 Press Escape or choose Menu to pause the action and open Settings or Help. Escape backs out through those screens and returns to your previous play or pause state. Settings enlarges text, buttons, and spacing; the available scale choices depend on window size, and the displayed limit keeps controls reachable. Reset returns to 100%. Settings last for the current session. Settler movement is drawn smoothly between simulation updates without changing job timing or survival rules.
 
-For a gentle first expedition, add mushrooms and an airfern beside the existing glow lamp in Lantern Hollow. Dig the ore plug below the central ladder, then extend that ladder three tiles down into Root Quarry. Gather its ore and the root deposit for generator fuel before building the beacon near the lamp. The upper roost, middle ledge, hollow, and quarry are connected by real walking and climbing routes.
+For a gentle first expedition, add mushrooms and an airfern beside the existing glow lamp in Lantern Hollow. Dig the ore plug below the central ladder, then extend that ladder three tiles down into Root Quarry. Gather its ore and the root deposit for generator fuel before building the tall beacon in the clear space to the right of the upper-roost beds. The upper roost, middle ledge, hollow, and quarry are connected by real walking and climbing routes.
 
 | Action | Controls |
 | --- | --- |
 | Select inspection / digging | 0 / 1 |
-| Select ladder / bed / mushrooms / airfern | 2 / 3 / 4 / 5 |
-| Select lamp / generator / cistern / beacon | 6 / 7 / 8 / 9 |
+| Browse construction | B or Build, then choose a category and an item |
 | Use selected tool | Left click; drag with Dig to mark multiple tiles |
 | Move tile cursor / use tool from keyboard | Arrow keys / Enter |
 | Cancel a queued job | X, then click its tile or press Enter |
@@ -45,7 +44,7 @@ node mosslight/tools/godot.mjs export-windows
 node mosslight/tools/godot.mjs export-macos
 ```
 
-`test` runs the simulation, motion-presentation, digging-animation, UI-settings, and terrain-cache checks. `verify` runs import, those five suites, and web export together. `--out <path>` overrides an export's output file. Exports use an isolated temporary copy of the Godot project, so task-local template paths are never written to tracked presets. Temporary staging is removed even after an export failure. Godot is run headlessly, with hidden Windows child processes and a bounded timeout. CI repeats import and all five suites with a checksum-pinned Godot runtime. Native frame pacing and motion need a real GPU-rendered run; headless Godot uses a dummy renderer and cannot establish that result.
+`test` runs the simulation, motion-presentation, digging-animation, UI-settings, terrain-cache, and pixel-art asset checks. `verify` runs import, those six suites, and web export together. `--out <path>` overrides an export's output file. Exports use an isolated temporary copy of the Godot project, so task-local template paths are never written to tracked presets. Temporary staging is removed even after an export failure. Godot is run headlessly, with hidden Windows child processes and a bounded timeout. CI repeats import and all six suites with a checksum-pinned Godot runtime. Native frame pacing and motion need a real GPU-rendered run; headless Godot uses a dummy renderer and cannot establish that result.
 
 Web output is written under ignored `output/mosslight-web/`; Windows and Mac artifacts go under ignored `output/mosslight-desktop/`. Launch `Mosslight.exe` on Windows, or unzip the Mac archive and open its `.app` on macOS. Serve the web output over localhost rather than opening its HTML as a file:
 

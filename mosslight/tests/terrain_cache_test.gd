@@ -214,22 +214,25 @@ func _test_retained_terrain() -> void:
 	_paint_changed(view, trace, {Vector2i(3, 2): true})
 	check(trace.rocks.size() == 1 and trace.rocks[0].kind == 2 and trace.rocks[0].exposed.y == 1.0, "material repaint uses the new kind and preserved ceiling exposure")
 
+	# Clear a real two-cell bed site before testing footprint growth invalidation.
+	sim.tiles[3][4] = 0
+	await _refresh(view, sim)
 	count = view.get("_terrain_redraw_count")
 	sim.buildings.append({"id": 1, "kind": "bed", "cell": CENTER, "active": true})
 	await _refresh(view, sim)
-	check(view.get("_terrain_redraw_count") - count == 1, "a completed building invalidates only its supporting floor's growth")
-	check(view.get("_terrain_signatures")[Vector2i(3, 4)][5], "supporting floor signature records the occupied cell above")
-	_paint_changed(view, trace, {Vector2i(3, 4): true})
-	check(trace.grounds.size() == 1 and trace.grounds[0].occupied, "production growth callback suppresses vegetation underneath infrastructure")
+	check(view.get("_terrain_redraw_count") - count == 2, "a two-cell bed invalidates both supporting floors and no unrelated cells")
+	check(view.get("_terrain_signatures")[Vector2i(3, 4)][5] and view.get("_terrain_signatures")[Vector2i(4, 4)][5], "both supporting floor signatures record their occupied cells above")
+	_paint_changed(view, trace, {Vector2i(3, 4): true, Vector2i(4, 4): true})
+	check(trace.grounds.size() == 2 and trace.grounds[0].occupied and trace.grounds[1].occupied, "production growth callback suppresses vegetation underneath infrastructure")
 	count = view.get("_terrain_redraw_count")
 	sim.buildings[0].active = false
 	await _refresh(view, sim)
 	check(view.get("_terrain_redraw_count") == count, "building activity changes redraw infrastructure without rebuilding terrain")
 	sim.buildings.clear()
 	await _refresh(view, sim)
-	check(view.get("_terrain_redraw_count") - count == 1 and not view.get("_terrain_signatures")[Vector2i(3, 4)][5], "removing infrastructure restores the old floor's unoccupied growth signature")
-	_paint_changed(view, trace, {Vector2i(3, 4): true})
-	check(trace.grounds.size() == 1 and not trace.grounds[0].occupied, "vacated floor restores ordinary growth through the actual paint callback")
+	check(view.get("_terrain_redraw_count") - count == 2 and not view.get("_terrain_signatures")[Vector2i(3, 4)][5] and not view.get("_terrain_signatures")[Vector2i(4, 4)][5], "removing infrastructure restores both floor growth signatures")
+	_paint_changed(view, trace, {Vector2i(3, 4): true, Vector2i(4, 4): true})
+	check(trace.grounds.size() == 2 and not trace.grounds[0].occupied and not trace.grounds[1].occupied, "vacated floor restores ordinary growth through the actual paint callback")
 
 	count = view.get("_terrain_redraw_count")
 	drawn_cells.clear()

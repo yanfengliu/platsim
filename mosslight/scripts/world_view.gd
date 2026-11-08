@@ -29,15 +29,14 @@ const MAX_ZOOM := 2.5
 const CACHE_TILE := TILE * MAX_ZOOM
 const TERRAIN_CHUNK := 4
 const CACHE_PADDING := 2
-const INK := Color("08171e")
+const INK := Color("101524")
 const MINT := Color("7fe0b0")
 const GOLD := Color("e8bb73")
 const CaveArt = preload("res://scripts/cave_art.gd")
 const PresentationMotion = preload("res://scripts/presentation_motion.gd")
-const BACKDROP = preload("res://assets/illustration/cavern-backdrop.webp")
-const BUILDINGS_UPPER = preload("res://assets/illustration/buildings-upper.webp")
-const BUILDINGS_LOWER = preload("res://assets/illustration/buildings-lower.webp")
-const BUILDING_REGIONS := {"bed": Rect2(467, 214, 394, 193), "farm": Rect2(911, 141, 396, 266), "airfern": Rect2(1348, 41, 392, 366), "lamp": Rect2(142, 69, 163, 333), "generator": Rect2(467, 39, 387, 364), "cistern": Rect2(933, 36, 347, 366), "beacon": Rect2(1419, 42, 264, 360)}
+const PixelAssets = preload("res://scripts/pixel_assets.gd")
+const BUILDING_KINDS := ["bed", "farm", "airfern", "lamp", "generator", "cistern", "beacon"]
+var _backdrop: Texture2D
 var simulation: RefCounted
 var camera := Vector2(18.0, 13.5)
 var zoom_level := 1.0
@@ -88,11 +87,12 @@ var _facing := {}
 var _last_positions := {}
 
 func _ready() -> void:
+	_backdrop = PixelAssets.backdrop()
 	clip_contents = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	focus_mode = Control.FOCUS_ALL
 	_font = ThemeDB.fallback_font
-	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	var terrain := _make_cache("terrain")
 	_terrain_viewport = terrain.viewport
 	_terrain_painter = terrain.painter
@@ -147,7 +147,7 @@ func _make_painter(kind: String, parent_node: Node) -> PaintLayer:
 	painter.kind = kind
 	painter.owner_view = self
 	painter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	painter.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	painter.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	parent_node.add_child(painter)
 	return painter
 
@@ -164,12 +164,13 @@ func _make_cache(kind: String) -> Dictionary:
 	add_child(viewport)
 	var painter := _make_painter(kind, viewport)
 	var display := TextureRect.new()
+	display.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	display.name = kind.capitalize() + "Surface"
 	display.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	display.texture = viewport.get_texture()
 	display.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	display.stretch_mode = TextureRect.STRETCH_SCALE
-	# Transparent viewport textures contain premultiplied RGB. Preserve soft edges/glows.
+	# Transparent viewport textures contain premultiplied RGB. Preserve the alpha of cached pixel silhouettes.
 	var blend := CanvasItemMaterial.new()
 	blend.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA
 	display.material = blend
@@ -186,7 +187,10 @@ func _refresh_caches() -> void:
 		var occupied := []
 		var infrastructure := []
 		for building in simulation.buildings:
-			occupied.append(building.cell)
+			var footprint: Rect2i = simulation.building_rect(building.kind, building.cell)
+			for y in range(footprint.position.y, footprint.end.y):
+				for x in range(footprint.position.x, footprint.end.x):
+					occupied.append(Vector2i(x, y))
 			infrastructure.append([building.cell, building.kind, building.get("active", true)])
 		_terrain_hash = hash([simulation.tiles, occupied])
 		_infrastructure_hash = hash(infrastructure)
@@ -328,7 +332,7 @@ func _zoom_at(point: Vector2, factor: float) -> void:
 	_clamp_camera()
 
 func _inspect_cell(point: Vector2) -> Vector2i:
-	# Illustrated heads and machinery extend above their logical cells. Inspection
+	# Pixel heads and machinery extend above their logical cells. Inspection
 	# follows visible silhouettes; construction and excavation retain exact tile targeting.
 	var unit := TILE * zoom_level
 	for index in range(simulation.colonists.size() - 1, -1, -1):
@@ -345,23 +349,42 @@ func _inspect_cell(point: Vector2) -> Vector2i:
 	return screen_cell(point)
 
 func _building_rect(pos: Vector2, unit: float, kind: String) -> Rect2:
-	if not BUILDING_REGIONS.has(kind):
+	if not BUILDING_KINDS.has(kind):
 		return Rect2(pos, Vector2.ONE * unit)
-	var source: Rect2 = BUILDING_REGIONS[kind]
-	var width_factor: float = {"bed": 1.4, "farm": 1.35, "airfern": 1.35, "lamp": 0.8, "generator": 1.35, "cistern": 1.35, "beacon": 1.2}[kind]
-	var draw_size := Vector2(unit * width_factor, unit * width_factor * source.size.y / source.size.x)
-	var footing := pos + Vector2(0.5, 1.04) * unit
+	var source_size := Vector2(PixelAssets.building_size(kind))
+	var footprint_size := Vector2(simulation.building_size(kind))
+	var scale_value := minf(footprint_size.x * unit / source_size.x, footprint_size.y * unit / source_size.y)
+	var draw_size := source_size * scale_value
+	var footing := pos + Vector2(footprint_size.x * 0.5, 1.0) * unit
 	return Rect2(footing - Vector2(draw_size.x * 0.5, draw_size.y), draw_size)
+
+func _footprint_screen(kind: String, anchor: Vector2i) -> Rect2:
+	var area: Rect2i = simulation.building_rect(kind, anchor)
+	var unit := TILE * zoom_level
+	return Rect2(cell_screen(Vector2(area.position)) - Vector2.ONE * unit * 0.5, Vector2(area.size) * unit)
+
+func _footprint_marks(surface: CanvasItem, bounds: Rect2, color: Color, fill: bool = true) -> void:
+	var unit := TILE * zoom_level
+	if fill:
+		for y in range(roundi(bounds.size.y / unit)):
+			for x in range(roundi(bounds.size.x / unit)):
+				surface.draw_rect(Rect2(bounds.position + Vector2(x, y) * unit + Vector2.ONE, Vector2.ONE * (unit - 2.0)), Color(color, 0.12))
+	var length := minf(unit * 0.3, minf(bounds.size.x, bounds.size.y) * 0.3)
+	for corner in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1)]:
+		var point: Vector2 = bounds.position + bounds.size * corner
+		var inward: Vector2 = Vector2.ONE - corner * 2.0
+		surface.draw_line(point, point + Vector2(inward.x * length, 0), color, 2.0)
+		surface.draw_line(point, point + Vector2(0, inward.y * length), color, 2.0)
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), INK)
 	if not simulation:
 		return
-	var scale_value := maxf(size.x / BACKDROP.get_width(), size.y / BACKDROP.get_height()) * 1.1
-	var backdrop_size := Vector2(BACKDROP.get_size()) * scale_value
+	var scale_value := maxf(size.x / _backdrop.get_width(), size.y / _backdrop.get_height()) * 1.1
+	var backdrop_size := Vector2(_backdrop.get_size()) * scale_value
 	var parallax := Vector2((camera.x - 18.0) * -1.6, (camera.y - 13.5) * -1.1)
-	draw_texture_rect(BACKDROP, Rect2((size - backdrop_size) * 0.5 + parallax, backdrop_size), false, Color(0.86, 0.94, 0.87, 1))
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.025, 0.09, 0.085, 0.1))
+	draw_texture_rect(_backdrop, Rect2((size - backdrop_size) * 0.5 + parallax, backdrop_size), false)
+
 
 func _refresh_terrain_cells() -> void:
 	var dimensions := Vector2i(simulation.width, simulation.height)
@@ -376,7 +399,10 @@ func _refresh_terrain_cells() -> void:
 		_rebuild_terrain_chunks(dimensions)
 	_terrain_occupied.clear()
 	for building in simulation.buildings:
-		_terrain_occupied[building.cell] = true
+		var footprint: Rect2i = simulation.building_rect(building.kind, building.cell)
+		for y in range(footprint.position.y, footprint.end.y):
+			for x in range(footprint.position.x, footprint.end.x):
+				_terrain_occupied[Vector2i(x, y)] = true
 	var dirty_chunks := {}
 	# Keep Godot's retained drawing commands for unchanged cells. Rebuilding the
 	# complete cave's vector art on every dig used to stall the main thread.
@@ -438,10 +464,11 @@ func _rebuild_terrain_chunks(dimensions: Vector2i) -> void:
 			var texture := AtlasTexture.new()
 			texture.atlas = viewport.get_texture()
 			texture.region = Rect2(Vector2(core.position - raster.position), Vector2(pixels))
-			# The surrounding texel preserves linear filtering across region edges.
+			# The surrounding texel preserves complete pixel coverage at region edges.
 			# Outer map edges keep the original full texture's clamped sampling.
 			texture.filter_clip = false
 			var display := TerrainPatch.new()
+			display.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 			display.texture = texture
 			display.material = _terrain_display.material
 			_terrain_surface.add_child(display)
@@ -491,27 +518,26 @@ func _paint_air(surface: CanvasItem) -> void:
 func _paint_infrastructure(surface: CanvasItem) -> void:
 	var unit := CACHE_TILE
 	for building in simulation.buildings:
-		var center := (Vector2(building.cell) + Vector2.ONE * 0.5) * unit
 		if building.kind in ["lamp", "beacon", "airfern"] and building.get("active", false):
-			_draw_glow(surface, center - Vector2(0, unit * 0.5), unit, building.kind)
+			var bounds := _building_rect(Vector2(building.cell) * unit, unit, building.kind)
+			_draw_glow(surface, bounds.position + bounds.size * Vector2(0.5, 0.35), unit, building.kind)
 	for building in simulation.buildings:
-		var center := (Vector2(building.cell) + Vector2.ONE * 0.5) * unit
-		_draw_building(surface, _infrastructure_art, center - Vector2.ONE * unit * 0.5, unit, building.kind, building.get("active", true), false)
+		_draw_building(surface, _infrastructure_art, Vector2(building.cell) * unit, unit, building.kind, building.get("active", true), false)
 
 func _paint_dynamic(surface: CanvasItem) -> void:
 	var unit := TILE * zoom_level
 	for job in simulation.jobs:
 		var center := cell_screen(Vector2(job.cell))
 		var color := GOLD if job.kind == "dig" else MINT
-		surface.draw_rect(Rect2(center - Vector2.ONE * unit * 0.46, Vector2.ONE * unit * 0.92), Color(color, 0.13))
-		_corner_marks(surface, center, unit * 0.44, color)
+		var bounds := Rect2(center - Vector2.ONE * unit * 0.5, Vector2.ONE * unit) if job.kind == "dig" else _footprint_screen(job.building_kind, job.cell)
+		_footprint_marks(surface, bounds.grow(-1), color)
 		if job.kind == "dig":
-			surface.draw_line(center - Vector2.ONE * unit * 0.15, center + Vector2.ONE * unit * 0.15, color, 1.5, true)
-			surface.draw_line(center + Vector2(-1, 1) * unit * 0.15, center + Vector2(1, -1) * unit * 0.15, color, 1.5, true)
+			surface.draw_line(center - Vector2.ONE * unit * 0.15, center + Vector2.ONE * unit * 0.15, color, 1.5, false)
+			surface.draw_line(center + Vector2(-1, 1) * unit * 0.15, center + Vector2(1, -1) * unit * 0.15, color, 1.5, false)
 		else:
-			_draw_building(surface, _dynamic_art, center - Vector2.ONE * unit * 0.5, unit, job.get("building_kind", ""), false, true)
+			_draw_building(surface, _dynamic_art, center - Vector2.ONE * unit * 0.5, unit, job.building_kind, false, true)
 		if job.get("progress", 0.0) > 0:
-			surface.draw_rect(Rect2(center + Vector2(-unit * 0.4, unit * 0.35), Vector2(unit * 0.8 * job.progress, 2)), color)
+			surface.draw_rect(Rect2(bounds.position + Vector2(2, bounds.size.y - 4), Vector2((bounds.size.x - 4) * job.progress, 2)), color)
 	for colonist in simulation.colonists:
 		_draw_colonist(surface, colonist, unit)
 	# A bounded set of dust motes sits in the light, below control overlays.
@@ -519,18 +545,35 @@ func _paint_dynamic(surface: CanvasItem) -> void:
 		var world_pos := Vector2(5.0 + fmod(index * 3.71, 29.0), 4.0 + fmod(index * 2.27 + _clock * 0.025, 19.0))
 		if _open(Vector2i(world_pos.floor())):
 			var point := cell_screen(world_pos)
-			surface.draw_circle(point, 0.8 + (index % 3) * 0.3, Color(0.9, 0.9, 0.65, 0.16 + sin(_clock * 0.7 + index) * 0.07))
+			surface.draw_rect(Rect2(point, Vector2.ONE * (1 + index % 2)), Color(0.65, 0.88, 0.8, 0.2 + sin(_clock * 0.7 + index) * 0.06))
 	if interactive and cursor.x >= 0 and cursor.y >= 0 and cursor.x < simulation.width and cursor.y < simulation.height:
 		var center := cell_screen(Vector2(cursor))
 		var color := MINT
+		var bounds := Rect2(center - Vector2.ONE * unit * 0.5, Vector2.ONE * unit)
+		var construction := selected_tool not in ["inspect", "dig", "cancel"]
 		if selected_tool == "dig":
 			color = GOLD
-		elif selected_tool == "cancel" or (selected_tool != "inspect" and simulation.can_build(selected_tool, cursor) != ""):
+		elif selected_tool == "cancel":
 			color = Color("efb08a")
-		surface.draw_rect(Rect2(center - Vector2.ONE * unit * 0.5, Vector2.ONE * unit), Color(color, 0.1))
-		_corner_marks(surface, center, unit * 0.5, color)
-		if keyboard_cursor:
-			surface.draw_string(_font, center + Vector2(-unit * 0.4, -unit * 0.7), "ENTER", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, color)
+			var job: Dictionary = simulation.job_at(cursor)
+			if not job.is_empty() and job.kind == "build":
+				bounds = _footprint_screen(job.building_kind, job.cell)
+		elif construction:
+			bounds = _footprint_screen(selected_tool, cursor)
+			if simulation.can_build(selected_tool, cursor) != "":
+				color = Color("ef8c82")
+			_draw_building(surface, _dynamic_art, center - Vector2.ONE * unit * 0.5, unit, selected_tool, false, true)
+		else:
+			var building: Dictionary = simulation.building_at(cursor)
+			if not building.is_empty():
+				bounds = _footprint_screen(building.kind, building.cell)
+		_footprint_marks(surface, bounds, color)
+		var label := "ENTER" if keyboard_cursor else ""
+		if construction:
+			var dimensions: Vector2i = simulation.building_size(selected_tool)
+			label += " %d x %d" % [dimensions.x, dimensions.y]
+		if not label.is_empty():
+			surface.draw_string(_font, bounds.position + Vector2(2, -5), label.strip_edges(), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, color)
 	if simulation.get("landmarks") is Array:
 		for landmark in simulation.landmarks:
 			var point := cell_screen(Vector2(landmark.cell))
@@ -543,33 +586,34 @@ func _open(cell: Vector2i) -> bool:
 func _corner_marks(surface: CanvasItem, center: Vector2, radius: float, color: Color) -> void:
 	for side in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
 		var corner: Vector2 = center + side * radius
-		surface.draw_line(corner, corner - Vector2(side.x * radius * 0.36, 0), color, 1.5, true)
-		surface.draw_line(corner, corner - Vector2(0, side.y * radius * 0.36), color, 1.5, true)
+		surface.draw_line(corner, corner - Vector2(side.x * radius * 0.36, 0), color, 1.5, false)
+		surface.draw_line(corner, corner - Vector2(0, side.y * radius * 0.36), color, 1.5, false)
 
 func _draw_glow(surface: CanvasItem, center: Vector2, unit: float, kind: String) -> void:
-	var color := Color("e8bb6c") if kind == "lamp" else Color("98dfbb")
-	for index in range(14, 0, -1):
-		var ratio := index / 14.0
-		var tint := Color(color, 0.007 + (1.0 - ratio) * 0.008)
-		surface.draw_circle(center, unit * (0.4 + ratio * 3.0), tint)
+	var color := Color("edb96e") if kind == "lamp" else Color("82d9c1")
+	# Three stepped halos complement sprites without a smooth painted aura.
+	for index in range(3, 0, -1):
+		var extent := unit * (0.5 + index * 0.55)
+		var tint := Color(color, 0.025)
+		surface.draw_rect(Rect2(center - Vector2(extent, extent * 0.6), Vector2(extent * 2, extent * 1.2)), tint)
+		surface.draw_rect(Rect2(center - Vector2(extent * 0.65, extent), Vector2(extent * 1.3, extent * 2)), tint)
 
 func _draw_building(surface: CanvasItem, art: RefCounted, pos: Vector2, unit: float, kind: String, active: bool, ghost: bool) -> void:
 	if kind == "ladder":
 		art.ladder(pos, unit)
 		return
-	if not BUILDING_REGIONS.has(kind):
+	if not BUILDING_KINDS.has(kind):
 		return
-	var source: Rect2 = BUILDING_REGIONS[kind]
-	var texture: Texture2D = BUILDINGS_UPPER if kind in ["bed", "farm", "airfern"] else BUILDINGS_LOWER
+	var texture: Texture2D = PixelAssets.building(kind)
 	var bounds := _building_rect(pos, unit, kind)
-	var footing := pos + Vector2(0.5, 1.04) * unit
+	var footing := Vector2(bounds.get_center().x, pos.y + unit)
 	var tint := Color(1, 1, 1, 0.38) if ghost else Color.WHITE if active or kind == "bed" else Color(0.7, 0.78, 0.72, 1)
 	if not ghost:
 		art.ellipse(footing + Vector2(0, -unit * 0.04), Vector2(bounds.size.x * 0.44, unit * 0.07), Color(0.025, 0.07, 0.06, 0.48))
-	surface.draw_texture_rect_region(texture, bounds, source, tint)
+	surface.draw_texture_rect(texture, bounds, false, tint)
 	if not active and not ghost and kind != "bed":
-		surface.draw_circle(pos + Vector2(0.88, -0.1) * unit, unit * 0.075, Color("edbb7e"))
-		surface.draw_circle(pos + Vector2(0.88, -0.1) * unit, unit * 0.035, Color("5e563b"))
+		surface.draw_rect(Rect2(bounds.position + Vector2(bounds.size.x - unit * 0.16, 0), Vector2.ONE * unit * 0.16), Color("edbb7e"))
+		surface.draw_rect(Rect2(bounds.position + Vector2(bounds.size.x - unit * 0.11, unit * 0.05), Vector2.ONE * unit * 0.06), Color("4a3444"))
 
 func _draw_colonist(surface: CanvasItem, colonist: Dictionary, unit: float) -> void:
 	var display_pose: Dictionary = _motion.pose(colonist)
@@ -578,6 +622,11 @@ func _draw_colonist(surface: CanvasItem, colonist: Dictionary, unit: float) -> v
 	_facing[id] = float(display_pose.get("visual_facing", 1.0))
 	_last_positions[id] = point
 	var pos := cell_screen(point) - Vector2.ONE * unit * 0.5
+	if bool(display_pose.get("visual_resting", false)) and int(colonist.get("bed", -1)) >= 0:
+		for building in simulation.buildings:
+			if building.id == colonist.bed:
+				pos = cell_screen(Vector2(building.cell)) - Vector2.ONE * unit * 0.5 + Vector2(0.25, -0.2) * unit
+				break
 	_dynamic_art.settler(pos, unit, display_pose, float(display_pose.get("visual_clock", _clock)), _facing[id])
 	if colonist.health < 70 and colonist.alive:
 		surface.draw_rect(Rect2(pos + Vector2(0.18, -0.69) * unit, Vector2(unit * 0.65, 3)), Color("543e36"))

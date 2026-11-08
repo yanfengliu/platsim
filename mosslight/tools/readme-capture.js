@@ -7,13 +7,19 @@ async (page) => {
   const snapshot = () => page.evaluate(() => window.__MOSSLIGHT_SNAPSHOT__);
   const press = async key => { await page.keyboard.press(key); await page.waitForTimeout(100); };
   const click = async name => {
+    await page.waitForTimeout(350);
     const state = await snapshot(), control = state.controls[name];
     if (!control?.visible || control.disabled) throw new Error(`Unavailable control: ${name}`);
     await page.mouse.click(control.clip.x + control.clip.width / 2, control.clip.y + control.clip.height / 2);
     await page.waitForTimeout(200);
   };
   const mark = async (key, x, y) => {
-    await press(key);
+    if (key === 'farm' || key === 'airfern') {
+      await press('b');
+      if ((await snapshot()).build_menu.category) await click('build_back');
+      await click('category_life_support');
+      await click('tool_' + key);
+    } else await press(key);
     const state = await snapshot();
     for (let i = 0; i < Math.abs(x - state.cursor.x); i++) await page.keyboard.press(x > state.cursor.x ? 'ArrowRight' : 'ArrowLeft');
     for (let i = 0; i < Math.abs(y - state.cursor.y); i++) await page.keyboard.press(y > state.cursor.y ? 'ArrowDown' : 'ArrowUp');
@@ -24,8 +30,8 @@ async (page) => {
   await page.waitForFunction(() => window.__MOSSLIGHT_SNAPSHOT__?.overlay === 'title', null, { timeout: 60000 });
   await click('start');
   await press('Space');
-  await mark('4', 21, 16);
-  await mark('5', 22, 16);
+  await mark('farm', 21, 16);
+  await mark('airfern', 22, 16);
   await mark('1', 18, 20);
   if ((await snapshot()).jobs.length !== 3) throw new Error('Representative colony jobs were not queued.');
   await click('speed_3');

@@ -2,10 +2,10 @@ extends SceneTree
 
 const Simulation = preload("res://scripts/simulation.gd")
 const PLUG := Vector2i(18, 20)
-const EXTRA_FARM := Vector2i(19, 16)
+const EXTRA_FARM := Vector2i(21, 16)
 const EXTRA_FERN := Vector2i(22, 16)
-const BEACON := Vector2i(24, 16)
-const FOUNDATION := Vector2i(24, 17)
+const BEACON := Vector2i(11, 6)
+const FOUNDATION := Vector2i(11, 7)
 var checks: int = 0
 var failures: Array[String] = []
 
@@ -40,6 +40,10 @@ func _init() -> void:
 	_test_initial_state()
 	_test_multilevel_terrain()
 	_test_accounting()
+	_test_building_footprints()
+	_test_ladder_occupancy()
+	_test_footprint_races()
+	_test_large_building_access()
 	_test_foundation_races()
 	_test_work_and_reachability()
 	_test_rooms()
@@ -104,12 +108,167 @@ func _test_accounting() -> void:
 	check(not sim.cancel_job(EXTRA_FARM) and sim.resources.ore == ore, "double cancel cannot mint resources")
 	check(not sim.queue_build("beacon", BEACON), "insufficient materials rejected")
 	check(sim.resources.ore == ore, "failed construction is free")
-	check(not sim.queue_build("farm", Vector2i(19, 15)), "floating farm rejected")
+	check(not sim.queue_build("farm", Vector2i(21, 15)), "floating farm rejected")
 	check(not sim.queue_build("farm", Vector2i(23, 17)), "solid tile building rejected")
-	check(not sim.queue_build("farm", Vector2i(25, 16)), "occupied tile building rejected")
+	check(not sim.queue_build("farm", Vector2i(24, 16)), "occupied tile building rejected")
 	check(not sim.queue_dig(Vector2i(0, 3)), "boundary rock protected")
 	check(not sim.queue_dig(Vector2i(-1, 3)), "out-of-bounds dig rejected")
-	check(not sim.queue_dig(Vector2i(25, 17)), "building foundations protected")
+	check(not sim.queue_dig(Vector2i(24, 17)), "building foundations protected")
+
+func _flat_footprint_colony() -> RefCounted:
+	# A plain test floor isolates footprint geometry from the authored cave route.
+	var sim = Simulation.new()
+	sim.buildings.clear()
+	sim.jobs.clear()
+	for y in range(sim.height):
+		for x in range(sim.width):
+			sim.tiles[y][x] = 1 if y >= 12 or y == 0 or x == 0 or x == sim.width - 1 else 0
+	sim._rebuild_rooms()
+	for room in sim.rooms:
+		room.air = 85.0
+	sim.resources.ore = 1000.0
+	sim.resources.biomass = 1000.0
+	sim.colonists.resize(1)
+	sim.colonists[0].pos = Vector2(8, 11)
+	return sim
+
+func _test_building_footprints() -> void:
+	var starter = Simulation.new()
+	var occupied: Dictionary = {}
+	for building in starter.buildings:
+		var area: Rect2i = starter.building_rect(building.kind, building.cell)
+		check(starter._building_site_reason(building.kind, building.cell, building.id).is_empty(), "%s starter has full clearance and support" % building.kind)
+		for y in range(area.position.y, area.end.y):
+			for x in range(area.position.x, area.end.x):
+				var cell := Vector2i(x, y)
+				check(not occupied.has(cell) and starter.building_at(cell).get("id", -1) == building.id, "%s starter occupies distinct cell %s" % [building.kind, cell])
+				occupied[cell] = building.id
+	var sizes: Dictionary = {"ladder": Vector2i(1, 1), "bed": Vector2i(2, 1), "farm": Vector2i(1, 1), "airfern": Vector2i(1, 2), "lamp": Vector2i(1, 2), "generator": Vector2i(2, 2), "cistern": Vector2i(2, 2), "beacon": Vector2i(2, 3)}
+	var anchor := Vector2i(12, 11)
+	for kind in sizes:
+		var sim: RefCounted = _flat_footprint_colony()
+		var size: Vector2i = sizes[kind]
+		var area: Rect2i = sim.building_rect(kind, anchor)
+		check(sim.building_size(kind) == size and area == Rect2i(anchor - Vector2i(0, size.y - 1), size), "%s uses its specified bottom-left footprint" % kind)
+		check(sim.can_build(kind, anchor).is_empty(), "%s fits clear supported footprint" % kind)
+		for y in range(area.position.y, area.end.y):
+			for x in range(area.position.x, area.end.x):
+				sim.tiles[y][x] = 1
+				check(not sim.can_build(kind, anchor).is_empty(), "%s needs clearance at %s" % [kind, Vector2i(x, y)])
+				sim.tiles[y][x] = 0
+		if kind != "ladder":
+			for x in range(anchor.x, anchor.x + size.x):
+				var support := Vector2i(x, anchor.y + 1)
+				sim.tiles[support.y][support.x] = 0
+				check(sim.can_build(kind, anchor).contains("floor"), "%s needs support under column %d" % [kind, x])
+				sim.tiles[support.y][support.x] = 1
+				check(sim.queue_dig(support), "%s can plan excavation before reserving column %d" % [kind, x])
+				check(sim.can_build(kind, anchor).contains("digging"), "%s rejects excavation under column %d" % [kind, x])
+				sim.cancel_job(support)
+		var original: Dictionary = sim.resources.duplicate()
+		check(sim.queue_build(kind, anchor), "%s reserves its full footprint" % kind)
+		var job: Dictionary = sim.job_at(anchor)
+		for y in range(area.position.y, area.end.y):
+			for x in range(area.position.x, area.end.x):
+				var cell := Vector2i(x, y)
+				check(sim.job_at(cell).get("id", -1) == job.id and not sim.can_build("ladder", cell).is_empty(), "%s reserved cell %s is queryable and blocks overlap" % [kind, cell])
+		if kind != "ladder":
+			for x in range(anchor.x, anchor.x + size.x):
+				check(not sim.queue_dig(Vector2i(x, anchor.y + 1)), "%s blueprint protects column %d" % [kind, x])
+		var corner := Vector2i(area.end.x - 1, area.position.y)
+		check(sim.cancel_job(corner) and sim.resources == original and sim.jobs.is_empty(), "%s cancels through its far corner and refunds once" % kind)
+		check(not sim.cancel_job(anchor) and sim.resources == original, "%s cannot refund again through its anchor" % kind)
+		sim._add_building(kind, anchor)
+		var built: Dictionary = sim.building_at(anchor)
+		for y in range(area.position.y, area.end.y):
+			for x in range(area.position.x, area.end.x):
+				var cell := Vector2i(x, y)
+				check(sim.building_at(cell).get("id", -1) == built.id and not sim.can_build("ladder", cell).is_empty(), "%s built cell %s is queryable and blocks overlap" % [kind, cell])
+		if kind != "ladder":
+			for x in range(anchor.x, anchor.x + size.x):
+				check(not sim.queue_dig(Vector2i(x, anchor.y + 1)), "%s completed foundation protects column %d" % [kind, x])
+	var bounds: RefCounted = _flat_footprint_colony()
+	for edge in [Vector2i(-1, 11), Vector2i(bounds.width - 1, 11), Vector2i(12, 1)]:
+		check(bounds.can_build("beacon", edge).contains("cavern"), "whole beacon must fit inside boundary at %s" % edge)
+	bounds._carve(Rect2i(12, bounds.height - 3, 2, 3))
+	check(bounds.can_build("beacon", Vector2i(12, bounds.height - 1)).contains("floor"), "world edge cannot substitute for a solid foundation")
+	var overlap: RefCounted = _flat_footprint_colony()
+	overlap._add_building("bed", Vector2i(13, 11))
+	check(overlap.can_build("bed", anchor).contains("occupied"), "candidate's far column cannot overlap an existing anchor")
+	check(overlap.can_build("bed", Vector2i(14, 11)).contains("occupied"), "candidate anchor cannot overlap an existing far column")
+
+func _test_footprint_races() -> void:
+	var anchor := Vector2i(12, 11)
+	for defect in ["upper terrain", "second foundation", "building overlap", "blueprint overlap", "foundation excavation"]:
+		var sim: RefCounted = _flat_footprint_colony()
+		var original: Dictionary = sim.resources.duplicate()
+		check(sim.queue_build("generator", anchor), "%s race: wide building queues" % defect)
+		var job: Dictionary = sim.job_at(anchor)
+		job.progress = 0.75
+		var worker: Dictionary = sim.colonists[0]
+		worker.pos = Vector2(anchor)
+		sim._find_work(worker)
+		check(worker.job == job.id, "%s race: valid site gets a worker" % defect)
+		match defect:
+			"upper terrain":
+				sim.tiles[10][13] = 1
+			"second foundation":
+				sim.tiles[12][13] = 0
+			"building overlap":
+				sim._add_building("ladder", Vector2i(13, 10))
+			"blueprint overlap":
+				var conflict: Dictionary = job.duplicate(true)
+				conflict.id = sim._take_id()
+				conflict.building_kind = "ladder"
+				conflict.cell = Vector2i(13, 10)
+				conflict.assigned = -1
+				conflict.cost = {}
+				sim.jobs.append(conflict)
+			"foundation excavation":
+				sim.jobs.append({"id": sim._take_id(), "kind": "dig", "cell": Vector2i(13, 12), "building_kind": "", "progress": 0.0, "assigned": -1, "cost": {}, "reason": "Stale excavation"})
+		sim._update_colonist(worker, 0.1, false)
+		check(job.progress == 0.75 and job.assigned == -1 and worker.job == -1, "%s race: execution stops and releases the worker" % defect)
+		# Assignment examines this job alone so a separately injected conflict cannot be chosen instead.
+		check(sim._job_goals(job).is_empty(), "%s race: invalid footprint supplies no remote work positions" % defect)
+		sim._find_work(worker)
+		check(worker.job != job.id and job.assigned == -1, "%s race: invalid footprint cannot be reassigned" % defect)
+		sim._release_job(worker)
+		job.progress = 1.0
+		sim._finish_job(job)
+		check(sim.building_at(anchor).is_empty() and sim.jobs.has(job) and job.progress < 1.0, "%s race: completion revalidates the entire footprint" % defect)
+		check(sim.resources.ore == original.ore - 20.0, "%s race: failed completion retains exactly one reservation" % defect)
+		check(sim.cancel_job(anchor) and sim.resources.ore == original.ore, "%s race: blocked construction remains fully refundable" % defect)
+	var active: RefCounted = _flat_footprint_colony()
+	active._add_building("generator", anchor)
+	var building: Dictionary = active.building_at(anchor)
+	for defect in [Vector2i(13, 10), Vector2i(13, 12)]:
+		var original_tile: int = active.tiles[defect.y][defect.x]
+		active.tiles[defect.y][defect.x] = 1 if original_tile == 0 else 0
+		var before: float = active.resources.biomass
+		active._update_buildings(1.0)
+		check(not building.active and active.resources.biomass == before, "production stops when non-anchor footprint or support fails at %s" % defect)
+		active.tiles[defect.y][defect.x] = original_tile
+		active._update_buildings(1.0)
+		check(building.active and active.resources.biomass < before, "valid full footprint resumes production after %s is repaired" % defect)
+
+func _test_large_building_access() -> void:
+	var anchor := Vector2i(12, 11)
+	for start in [Vector2i(11, 11), Vector2i(12, 11), Vector2i(13, 11), Vector2i(14, 11)]:
+		var sim: RefCounted = _flat_footprint_colony()
+		var worker: Dictionary = sim.colonists[0]
+		worker.pos = Vector2(start)
+		check(sim.queue_build("beacon", anchor), "largest building queues beside worker at %s" % start)
+		var job: Dictionary = sim.job_at(anchor)
+		var goals: Array = sim._job_goals(job)
+		check(goals.has(start), "largest building can be worked from floor or perimeter cell %s" % start)
+		check(not goals.has(Vector2i(15, 11)) and not goals.has(Vector2i(10, 11)), "largest building never exposes remote floor cells as work goals")
+		check(advance_until(sim, func() -> bool: return sim.jobs.is_empty(), 8.0), "worker at %s completes largest building without reaching the anchor" % start)
+		check(sim.building_at(Vector2i(13, 9)).get("kind", "") == "beacon" and worker.pos == Vector2(start), "largest building completes at full height with worker staying at %s" % start)
+	var isolated = Simulation.new()
+	isolated.resources.ore = 100.0
+	check(isolated.queue_build("beacon", Vector2i(40, 14)), "largest building can be planned in sealed cave")
+	advance(isolated, 15.0)
+	check(isolated.jobs[0].progress == 0.0 and isolated.jobs[0].reason.contains("Unreachable"), "workers never remotely construct a large building in another cave")
 
 func _test_work_and_reachability() -> void:
 	var sim = Simulation.new()
@@ -233,8 +392,8 @@ func _test_production() -> void:
 	sim.resources.power = 0.0
 	advance(sim, 1.0)
 	check(not sim.building_at(Vector2i(23, 16)).active, "empty generator supply disables lamp")
-	check(not sim.building_at(Vector2i(25, 16)).active, "dark crops stop growing")
-	check(sim.building_at(Vector2i(25, 16)).reason.contains("dark"), "dark crop reason is actionable")
+	check(not sim.building_at(Vector2i(24, 16)).active, "dark crops stop growing")
+	check(sim.building_at(Vector2i(24, 16)).reason.contains("dark"), "dark crop reason is actionable")
 	sim.resources.water = 0.0
 	sim.resources.power = 20.0
 	for building in sim.buildings:
@@ -302,7 +461,9 @@ func _test_playable_win() -> void:
 	check(sim.tiles[23][9] == 0 and sim.resources.biomass > 50.0, "ordinary root gathering replenishes biomass after ladder and plant costs")
 	check(sim.resources.ore >= 60.0, "ordinary exploration supplies beacon materials")
 	check(sim.queue_build("beacon", BEACON), "ordinary exploration affords hearth beacon")
+	check(not sim.queue_dig(FOUNDATION) and not sim.queue_dig(FOUNDATION + Vector2i.RIGHT), "ordinary beacon blueprint protects both upper roost support columns")
 	advance(sim, 150.0)
+	check(sim.building_at(BEACON).get("active", false) and not sim.queue_dig(FOUNDATION) and not sim.queue_dig(FOUNDATION + Vector2i.RIGHT), "ordinary completed beacon keeps both upper roost support columns")
 	check(sim.status == "playing", "beacon does not skip the survival duration")
 	check(sim.stable_seconds > 0.0, "balanced colony earns stability progress")
 	advance(sim, 1201.0 - sim.elapsed)
@@ -338,3 +499,22 @@ func _test_local_sustainability() -> void:
 	advance(water, 130.0)
 	check(water.status == "playing" and water.stable_seconds == 0.0, "stored water without renewable supply is not self-sustaining")
 	check(water.objective_reason.contains("dew collectors"), "water sustainability explains the missing collector")
+
+func _test_ladder_occupancy() -> void:
+	var sim = Simulation.new()
+	var matches := true
+	for y in range(sim.height):
+		for x in range(sim.width):
+			var cell := Vector2i(x, y)
+			var occupant: Dictionary = sim.building_at(cell)
+			matches = matches and sim._has_ladder(cell) == (occupant.get("kind", "") == "ladder")
+	check(matches, "Only actual ladder segments confer climbing across every occupied and empty cell")
+	check(sim.queue_dig(PLUG), "New ladder route excavates a real extension site")
+	sim._finish_job(sim.job_at(PLUG))
+	check(sim.queue_build("ladder", PLUG) and not sim._has_ladder(PLUG), "A planned ladder does not grant climbing before completion")
+	check(sim.cancel_job(PLUG) and not sim._has_ladder(PLUG), "Canceled ladder plans never leave climbing access")
+	check(sim.queue_build("ladder", PLUG), "A canceled ladder can be planned again")
+	sim._finish_job(sim.job_at(PLUG))
+	check(sim._has_ladder(PLUG) and sim.is_walkable(PLUG), "Newly completed ladder immediately extends the walkable route")
+	sim.buildings.erase(sim.building_at(PLUG))
+	check(not sim._has_ladder(PLUG), "Removed ladder leaves no stale climbing access")

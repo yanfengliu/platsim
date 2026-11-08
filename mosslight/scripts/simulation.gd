@@ -3,14 +3,14 @@ extends RefCounted
 
 ## The colony is plain data. Rendering and input never advance or own simulation state.
 const CATALOG: Dictionary = {
-	"ladder": {"name": "Root ladder", "description": "Reach other levels. Extend from an accessible floor or ladder.", "cost": {"biomass": 2}},
-	"bed": {"name": "Leaf bed", "description": "A place for one tired colonist to recover energy.", "cost": {"biomass": 8}},
-	"farm": {"name": "Mushroom bed", "description": "Produces 1 food every 90 seconds. Needs light and water.", "cost": {"ore": 8, "biomass": 8}},
-	"airfern": {"name": "Breathing fern", "description": "Refreshes this cave's air. Needs light and water.", "cost": {"ore": 8, "biomass": 12}},
-	"lamp": {"name": "Glow lamp", "description": "Lights plants within 5 tiles. Uses 0.6 power per second.", "cost": {"ore": 10}},
-	"generator": {"name": "Bio generator", "description": "Turns biomass into 4 power per second.", "cost": {"ore": 20}},
-	"cistern": {"name": "Dew collector", "description": "Collects 0.18 water per second from cave moisture.", "cost": {"ore": 12}},
-	"beacon": {"name": "Hearth beacon", "description": "Uses 1.8 power per second. Keep the colony healthy through day five.", "cost": {"ore": 60, "biomass": 24}}
+	"ladder": {"size": Vector2i(1, 1), "name": "Root ladder", "description": "Reach other levels. Extend from an accessible floor or ladder.", "cost": {"biomass": 2}},
+	"bed": {"size": Vector2i(2, 1), "name": "Leaf bed", "description": "A place for one tired colonist to recover energy.", "cost": {"biomass": 8}},
+	"farm": {"size": Vector2i(1, 1), "name": "Mushroom bed", "description": "Produces 1 food every 90 seconds. Needs light and water.", "cost": {"ore": 8, "biomass": 8}},
+	"airfern": {"size": Vector2i(1, 2), "name": "Breathing fern", "description": "Refreshes this cave's air. Needs light and water.", "cost": {"ore": 8, "biomass": 12}},
+	"lamp": {"size": Vector2i(1, 2), "name": "Glow lamp", "description": "Lights plants within 5 tiles. Uses 0.6 power per second.", "cost": {"ore": 10}},
+	"generator": {"size": Vector2i(2, 2), "name": "Bio generator", "description": "Turns biomass into 4 power per second.", "cost": {"ore": 20}},
+	"cistern": {"size": Vector2i(2, 2), "name": "Dew collector", "description": "Collects 0.18 water per second from cave moisture.", "cost": {"ore": 12}},
+	"beacon": {"size": Vector2i(2, 3), "name": "Hearth beacon", "description": "Uses 1.8 power per second. Keep the colony healthy through day five.", "cost": {"ore": 60, "biomass": 24}}
 }
 const DAY_SECONDS: float = 240.0
 const SURVIVAL_SECONDS: float = 1200.0
@@ -133,7 +133,7 @@ func reset(new_seed: int = 42) -> void:
 		room.air = 18.0
 	for cell in [Vector2i(7, 6), Vector2i(9, 6), Vector2i(12, 13), Vector2i(15, 13)]:
 		_add_building("bed", cell)
-	for entry in [["generator", Vector2i(20, 16)], ["lamp", Vector2i(23, 16)], ["farm", Vector2i(25, 16)], ["airfern", Vector2i(27, 18)], ["cistern", Vector2i(30, 18)]]:
+	for entry in [["generator", Vector2i(19, 16)], ["lamp", Vector2i(23, 16)], ["farm", Vector2i(24, 16)], ["airfern", Vector2i(27, 18)], ["cistern", Vector2i(30, 18)]]:
 		_add_building(entry[0], entry[1])
 	for y in range(7, 13):
 		_add_building("ladder", Vector2i(14, y))
@@ -158,25 +158,65 @@ func in_bounds(cell: Vector2i) -> bool:
 func is_open(cell: Vector2i) -> bool:
 	return in_bounds(cell) and tiles[cell.y][cell.x] == 0
 
+func building_size(kind: String) -> Vector2i:
+	return CATALOG[kind].size if CATALOG.has(kind) else Vector2i.ONE
+
+func building_rect(kind: String, anchor: Vector2i) -> Rect2i:
+	# Every building is anchored at its bottom-left floor cell.
+	var size: Vector2i = building_size(kind)
+	return Rect2i(anchor - Vector2i(0, size.y - 1), size)
+
+func _job_rect(job: Dictionary) -> Rect2i:
+	return building_rect(job.building_kind, job.cell) if job.kind == "build" else Rect2i(job.cell, Vector2i.ONE)
+
 func building_at(cell: Vector2i) -> Dictionary:
 	for building in buildings:
-		if building.cell == cell:
+		if building_rect(building.kind, building.cell).has_point(cell):
 			return building
 	return {}
 
 func job_at(cell: Vector2i) -> Dictionary:
 	for job in jobs:
-		if job.cell == cell:
+		if _job_rect(job).has_point(cell):
 			return job
 	return {}
+
+func _building_site_reason(kind: String, anchor: Vector2i, ignored_building: int = -1, ignored_job: int = -1) -> String:
+	var area: Rect2i = building_rect(kind, anchor)
+	if area.position.x < 0 or area.position.y < 0 or area.end.x > width or area.end.y > height:
+		return "Keep the whole building inside the cavern."
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var cell := Vector2i(x, y)
+			if not is_open(cell):
+				return "Excavate the whole building footprint before placing it."
+	for building in buildings:
+		if building.id != ignored_building and area.intersects(building_rect(building.kind, building.cell)):
+			return "Part of this footprint is already occupied."
+	for job in jobs:
+		if job.id != ignored_job and area.intersects(_job_rect(job)):
+			return "Part of this footprint is already reserved."
+	if kind != "ladder":
+		for x in range(area.position.x, area.end.x):
+			var foundation := Vector2i(x, anchor.y + 1)
+			if not in_bounds(foundation) or is_open(foundation):
+				return "Place every column of this building on a solid floor."
+			var floor_job: Dictionary = job_at(foundation)
+			if not floor_job.is_empty() and floor_job.kind == "dig":
+				return "This floor is marked for digging. Cancel that excavation before building here."
+	return ""
 
 func room_at(cell: Vector2i) -> Dictionary:
 	var index: int = int(_room_ids.get(cell, -1))
 	return rooms[index] if index >= 0 and index < rooms.size() else {}
 
 func _has_ladder(cell: Vector2i) -> bool:
-	var building: Dictionary = building_at(cell)
-	return not building.is_empty() and building.kind == "ladder"
+	# Navigation asks this tens of thousands of times during route searches.
+	# Ladder segments remain 1x1; other furniture never grants climbing access.
+	for building in buildings:
+		if building.kind == "ladder" and building.cell == cell:
+			return true
+	return false
 
 func is_walkable(cell: Vector2i) -> bool:
 	return is_open(cell) and (not is_open(cell + Vector2i.DOWN) or _has_ladder(cell) or _has_ladder(cell + Vector2i.DOWN))
@@ -225,28 +265,34 @@ func _path_to(start: Vector2i, goals: Array) -> Array:
 
 func _job_goals(job: Dictionary) -> Array:
 	var result: Array = []
-	var cell: Vector2i = job.cell
-	if job.kind == "build" and job.building_kind != "ladder" and is_open(cell + Vector2i.DOWN):
+	if job.kind == "build" and not _building_site_reason(job.building_kind, job.cell, -1, job.id).is_empty():
 		return result
-	if job.kind == "build" and is_walkable(cell):
-		result.append(cell)
-	for direction in DIRECTIONS:
-		var next: Vector2i = cell + direction
-		if is_walkable(next):
-			result.append(next)
+	var area: Rect2i = _job_rect(job)
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var cell := Vector2i(x, y)
+			if job.kind == "build" and is_walkable(cell) and not result.has(cell):
+				result.append(cell)
+			for direction in DIRECTIONS:
+				var next: Vector2i = cell + direction
+				if is_walkable(next) and not result.has(next):
+					result.append(next)
 	return result
 
 func _reject(reason: String) -> bool:
 	message = reason
 	return false
 
+func _supports_building(cell: Vector2i, kind: String, anchor: Vector2i) -> bool:
+	return kind != "ladder" and cell.y == anchor.y + 1 and cell.x >= anchor.x and cell.x < anchor.x + building_size(kind).x
+
 func _foundation_owner_name(cell: Vector2i) -> String:
-	var above: Dictionary = building_at(cell + Vector2i.UP)
-	if not above.is_empty() and above.kind != "ladder":
-		return CATALOG[above.kind].name
-	var blueprint: Dictionary = job_at(cell + Vector2i.UP)
-	if not blueprint.is_empty() and blueprint.kind == "build" and blueprint.building_kind != "ladder":
-		return "planned %s" % CATALOG[blueprint.building_kind].name
+	for building in buildings:
+		if _supports_building(cell, building.kind, building.cell):
+			return CATALOG[building.kind].name
+	for job in jobs:
+		if job.kind == "build" and _supports_building(cell, job.building_kind, job.cell):
+			return "planned %s" % CATALOG[job.building_kind].name
 	return ""
 
 func queue_dig(cell: Vector2i) -> bool:
@@ -271,16 +317,9 @@ func can_build(kind: String, cell: Vector2i) -> String:
 		return "This expedition has ended. Start a new colony."
 	if not CATALOG.has(kind):
 		return "Choose a building from the toolbar."
-	if not is_open(cell):
-		return "Excavate this tile before placing a building."
-	if not building_at(cell).is_empty() or not job_at(cell).is_empty():
-		return "This tile is already occupied or reserved."
-	if kind != "ladder" and is_open(cell + Vector2i.DOWN):
-		return "Place this building on a solid floor."
-	if kind != "ladder":
-		var foundation_job: Dictionary = job_at(cell + Vector2i.DOWN)
-		if not foundation_job.is_empty() and foundation_job.kind == "dig":
-			return "This floor is marked for digging. Cancel that excavation before building here."
+	var site_reason: String = _building_site_reason(kind, cell)
+	if not site_reason.is_empty():
+		return site_reason
 	if kind == "beacon":
 		for building in buildings:
 			if building.kind == "beacon":
@@ -377,12 +416,10 @@ func _update_buildings(dt: float) -> void:
 	for building in buildings:
 		building.active = true
 		building.reason = "Ready"
-		if not is_open(building.cell):
+		var site_reason: String = _building_site_reason(building.kind, building.cell, building.id)
+		if not site_reason.is_empty():
 			building.active = false
-			building.reason = "Blocked by terrain"
-		elif building.kind != "ladder" and is_open(building.cell + Vector2i.DOWN):
-			building.active = false
-			building.reason = "Needs a solid floor beneath it"
+			building.reason = site_reason
 		if not building.active:
 			continue
 		if building.kind == "generator":
@@ -451,6 +488,11 @@ func _find_work(colonist: Dictionary) -> void:
 	for job in jobs:
 		if job.assigned != -1:
 			continue
+		if job.kind == "build":
+			var site_reason: String = _building_site_reason(job.building_kind, job.cell, -1, job.id)
+			if not site_reason.is_empty():
+				job.reason = site_reason
+				continue
 		var path: Array = _path_to(start, _job_goals(job))
 		if path.is_empty():
 			job.reason = "Unreachable — dig a route or extend a ladder"
@@ -511,7 +553,19 @@ func _cancel_protected_dig(job: Dictionary) -> bool:
 	_notify("Dig canceled: this rock now supports %s." % foundation_owner)
 	return true
 
+func _pause_build_job(job: Dictionary, reason: String) -> void:
+	job.assigned = -1
+	job.reason = reason
+	job.progress = minf(job.progress, 0.99)
+	for colonist in colonists:
+		if colonist.job == job.id:
+			colonist.job = -1
+			colonist.path = []
+			colonist.task = "Ready to help"
+
 func _finish_job(job: Dictionary) -> void:
+	if not jobs.has(job):
+		return
 	var cell: Vector2i = job.cell
 	if job.kind == "dig":
 		if _cancel_protected_dig(job):
@@ -525,11 +579,10 @@ func _finish_job(job: Dictionary) -> void:
 			resources.water += 25.0
 		_rebuild_rooms()
 	else:
-		# A floor may have been dug away after the job was queued.
-		if job.building_kind != "ladder" and is_open(cell + Vector2i.DOWN):
-			job.assigned = -1
-			job.reason = "Construction needs a solid floor"
-			job.progress = 0.99
+		# Recheck the full site even when completion follows a stale assignment.
+		var site_reason: String = _building_site_reason(job.building_kind, cell, -1, job.id)
+		if not site_reason.is_empty():
+			_pause_build_job(job, site_reason)
 			return
 		_add_building(job.building_kind, cell)
 		_notify("%s completed." % CATALOG[job.building_kind].name)
@@ -611,6 +664,11 @@ func _update_colonist(colonist: Dictionary, dt: float, decide: bool) -> void:
 		return
 	if _cancel_protected_dig(job):
 		return
+	if job.kind == "build":
+		var site_reason: String = _building_site_reason(job.building_kind, job.cell, -1, job.id)
+		if not site_reason.is_empty():
+			_pause_build_job(job, site_reason)
+			return
 	if not _move(colonist, dt):
 		if colonist.path.is_empty():
 			_release_job(colonist)

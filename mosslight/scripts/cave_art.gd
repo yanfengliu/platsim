@@ -1,242 +1,160 @@
 extends RefCounted
 
-## Authored foreground forms. Every floor and wall follows authoritative solid cells.
+## Original pixel clusters. Solid-cell edges remain authoritative for traversal.
 var canvas: CanvasItem
-const STONE := Color("3f5148")
-const DEEP := Color("263e3a")
-const EDGE := Color("8a9472")
-const MOSS := Color("648359")
-const PALE := Color("b8c98b")
-const LIMESTONE = preload("res://assets/illustration/limestone.webp")
+const STONE := Color("34384f")
+const DEEP := Color("1d2235")
+const EDGE := Color("797b91")
+const MOSS := Color("427565")
+const PALE := Color("a5d5a0")
+const PIXEL := 1.0 / 24.0
 const DiggingMotion = preload("res://scripts/digging_motion.gd")
+const PixelSettler = preload("res://scripts/pixel_settler.gd")
 
 func _init(target: CanvasItem) -> void:
 	canvas = target
 
-func ellipse(center: Vector2, radius: Vector2, color: Color, steps: int = 20) -> void:
-	var points := PackedVector2Array()
-	for index in range(steps):
-		var angle := TAU * index / steps
-		points.append(center + Vector2(cos(angle) * radius.x, sin(angle) * radius.y))
-	canvas.draw_colored_polygon(points, color)
+func block(rect: Rect2, color: Color) -> void:
+	canvas.draw_rect(rect, color)
+
+func ellipse(center: Vector2, radius: Vector2, color: Color, _steps: int = 20) -> void:
+	# Scanline clusters have hard edges. Cap rows for world-space building shadows.
+	var pixel := maxf(PIXEL, ceilf(radius.y * 2.0 / 24.0)) if radius.y > 1.0 else PIXEL
+	var first := floori((center.y - radius.y) / pixel)
+	var last := ceili((center.y + radius.y) / pixel)
+	for row in range(first, maxi(first + 1, last)):
+		var y := (row + 0.5) * pixel
+		var normalized := clampf((y - center.y) / maxf(radius.y, pixel), -1.0, 1.0)
+		var half_width := maxf(pixel * 0.5, radius.x * sqrt(maxf(0.0, 1.0 - normalized * normalized)))
+		var left := floorf((center.x - half_width) / pixel) * pixel
+		var right := ceilf((center.x + half_width) / pixel) * pixel
+		block(Rect2(left, row * pixel, maxf(pixel, right - left), pixel), color)
 
 func stroke(points: Array, color: Color, width: float) -> void:
-	var path := PackedVector2Array()
-	for point in points:
-		path.append(point)
-	canvas.draw_polyline(path, color, width, true)
-	canvas.draw_circle(path[0], width * 0.5, color)
-	canvas.draw_circle(path[-1], width * 0.5, color)
+	# A pixel brush follows the continuous rig; animation clocks are never quantized.
+	var thickness := maxi(1, roundi(width / PIXEL))
+	for index in range(points.size() - 1):
+		var start: Vector2 = points[index]
+		var finish: Vector2 = points[index + 1]
+		var distance: Vector2 = (finish - start).abs() / PIXEL
+		var count := maxi(1, ceili(maxf(distance.x, distance.y)))
+		for sample in range(count + 1):
+			var point := start.lerp(finish, float(sample) / count)
+			var pixel_point := (point / PIXEL).round() - Vector2.ONE * floorf(thickness * 0.5)
+			block(Rect2(pixel_point * PIXEL, Vector2.ONE * thickness * PIXEL), color)
 
-func leaf(base: Vector2, tip: Vector2, width: float, color: Color) -> void:
-	var direction := tip - base
-	var normal := Vector2(-direction.y, direction.x).normalized() * width
-	var middle := base + direction * 0.48
-	canvas.draw_colored_polygon(PackedVector2Array([base, middle + normal, tip, middle - normal]), color)
-	canvas.draw_line(base, tip, color.lightened(0.14), width * 0.16, true)
-
-func curved_stroke(start: Vector2, control_a: Vector2, control_b: Vector2, end: Vector2, color: Color, width: float) -> void:
-	var points := []
-	for index in range(13):
-		var t := index / 12.0
-		var inverse := 1.0 - t
-		points.append(start * inverse * inverse * inverse + control_a * 3.0 * inverse * inverse * t + control_b * 3.0 * inverse * t * t + end * t * t * t)
-	stroke(points, color, width)
+func _tile_rect(x: int, y: int, width: int, height: int, color: Color) -> void:
+	block(Rect2(float(x) / 16.0, float(y) / 16.0, float(width) / 16.0, float(height) / 16.0), color)
 
 func rock(cell: Vector2i, pos: Vector2, unit: float, kind: int, exposed: Vector4) -> void:
 	canvas.draw_set_transform(pos, 0, Vector2.ONE * unit)
-	# One painting spans eight cells in each direction, sampled in world coordinates.
-	# Digging changes the authoritative mask without moving or restarting the strata.
-	var texture_step := LIMESTONE.get_width() / 8.0
-	var source := Rect2(posmod(cell.x, 8) * texture_step, posmod(cell.y, 8) * texture_step, texture_step, texture_step)
-	canvas.draw_texture_rect_region(LIMESTONE, Rect2(0, 0, 1, 1), source, Color(0.68, 0.78, 0.69, 1))
-	var seed_value := posmod(cell.x * 47 + cell.y * 29, 17)
-	if exposed.x > 0: # Ground surface.
-		canvas.draw_colored_polygon(PackedVector2Array([Vector2(-0.02, 0), Vector2(0.18, -0.025), Vector2(0.43, 0.015), Vector2(0.72, -0.01), Vector2(1.02, 0), Vector2(1.0, 0.2), Vector2(0.74, 0.24), Vector2(0.46, 0.17), Vector2(0.2, 0.22), Vector2(0, 0.15)]), Color("737f62"))
-		stroke([Vector2(-0.01, 0), Vector2(0.22, -0.015), Vector2(0.5, 0.01), Vector2(0.8, -0.02), Vector2(1.01, 0)], EDGE, 0.055)
-		for i in range(5):
-			var x := 0.06 + i * 0.21
-			ellipse(Vector2(x, 0.025), Vector2(0.16, 0.06), MOSS)
-			ellipse(Vector2(x + 0.03, -0.015), Vector2(0.11, 0.025), Color("8a9f6b"))
-	if exposed.y > 0: # Ceiling, with the shadowed underside of a limestone shelf.
-		canvas.draw_colored_polygon(PackedVector2Array([Vector2(0, 0.82), Vector2(0.3, 0.9), Vector2(0.61, 0.78), Vector2(1, 0.86), Vector2(1, 1.02), Vector2(0.77, 1), Vector2(0.55, 1.13), Vector2(0.3, 0.98), Vector2(0, 1.02)]), DEEP)
-		stroke([Vector2(0, 0.9), Vector2(0.34, 0.95), Vector2(0.62, 0.87), Vector2(1, 0.96)], Color("536652"), 0.035)
+	var seed_value := posmod(cell.x * 47 + cell.y * 29, 101)
+	var band := posmod(floori(cell.x / 3.0) + floori(cell.y / 2.0), 3)
+	_tile_rect(0, 0, 16, 16, [STONE, Color("383b53"), Color("30364b")][band])
+	# Broad quiet strata and a few stone clusters, never a per-tile box outline.
+	for i in range(4):
+		var x := posmod(seed_value + i * 7, 12)
+		var y := posmod(seed_value * 3 + i * 5, 14)
+		var length := mini(16 - x, 3 + posmod(seed_value + i, 5))
+		_tile_rect(x, y, length, 1 + i % 2, Color("41465d") if i % 2 == 0 else Color("2c3045"))
+		if i == 1:
+			_tile_rect(x + 1, y, maxi(1, length - 2), 1, Color("50546b"))
+	if exposed.x > 0:
+		_tile_rect(0, 0, 16, 3, Color("233c3d"))
+		_tile_rect(0, 0, 16, 1, Color("8ac89a"))
+		_tile_rect(0, 1, 16, 1, Color("4d8c70"))
+		for i in range(4):
+			_tile_rect(i * 4 + seed_value % 2, 2, 2, 1 + (seed_value + i) % 3, Color("385e51"))
+	if exposed.y > 0:
+		_tile_rect(0, 14, 16, 2, DEEP)
+		for i in range(3):
+			_tile_rect(i * 5 + 1, 13, 3, 1, Color("252a40"))
 	if exposed.z > 0:
-		canvas.draw_colored_polygon(PackedVector2Array([Vector2(0, 0), Vector2(0.11, 0.13), Vector2(0.07, 0.43), Vector2(0.16, 0.71), Vector2(0.08, 1), Vector2(-0.015, 1)]), Color("71806a"))
-		stroke([Vector2(0.015, 0), Vector2(0.025, 0.3), Vector2(-0.015, 0.65), Vector2(0.02, 1)], Color("a0a082"), 0.035)
+		_tile_rect(0, 0, 1, 16, Color("73748a"))
+		_tile_rect(1, 3, 1, 5, Color("555a73"))
+		_tile_rect(1, 11, 2, 4, Color("454d66"))
 	if exposed.w > 0:
-		canvas.draw_colored_polygon(PackedVector2Array([Vector2(0.81, 0), Vector2(0.91, 0.28), Vector2(0.82, 0.62), Vector2(0.93, 1), Vector2(1.02, 1), Vector2(1.01, 0)]), DEEP)
-		stroke([Vector2(0.98, 0), Vector2(0.96, 0.42), Vector2(1.01, 0.78), Vector2(0.97, 1)], Color("5b6a54"), 0.035)
+		_tile_rect(14, 0, 2, 16, DEEP)
+		_tile_rect(13, 5, 1, 7, Color("292d42"))
 	if kind == 2:
 		for i in range(3):
-			var center := Vector2(0.28 + i * 0.23, 0.47 + sin(i * 3.0 + cell.y) * 0.14)
-			ellipse(center + Vector2(0.01, 0.025), Vector2(0.155, 0.13), Color("394b40"), 9)
-			ellipse(center, Vector2(0.13, 0.11), Color("a99a76"), 7)
-			ellipse(center + Vector2(-0.025, -0.045), Vector2(0.085, 0.04), Color("cebb8f"), 7)
-			canvas.draw_line(center + Vector2(-0.04, 0.04), center + Vector2(0.07, -0.04), Color("7d785a"), 0.02, true)
+			var x := 3 + i * 4
+			var y := 6 + posmod(seed_value + i * 3, 4)
+			_tile_rect(x - 1, y, 4, 4, DEEP)
+			_tile_rect(x, y, 3, 3, Color("b37558"))
+			_tile_rect(x, y, 2, 1, Color("f0c584"))
+			_tile_rect(x, y + 1, 1, 1, Color("ffe5ab"))
 	elif kind == 3:
-		var sway := seed_value * 0.015
-		curved_stroke(Vector2(0.14, 0.15), Vector2(0.8, 0.1), Vector2(0.05, 0.82), Vector2(0.86, 0.81), Color("4c4e35"), 0.11)
-		curved_stroke(Vector2(0.14, 0.14), Vector2(0.8, 0.09), Vector2(0.05, 0.8), Vector2(0.86, 0.79), Color("948459"), 0.055)
-		curved_stroke(Vector2(0.51, 0.38), Vector2(0.8, 0.4 + sway), Vector2(0.9, 0.2), Vector2(0.86, 0.1), Color("a18e5f"), 0.033)
-		curved_stroke(Vector2(0.45, 0.63), Vector2(0.2, 0.58), Vector2(0.1, 0.79), Vector2(0.18, 0.92), Color("8c8056"), 0.03)
-		leaf(Vector2(0.69, 0.32), Vector2(0.87, 0.13), 0.085, Color("8f9e66"))
+		for i in range(5):
+			var x := 3 + i * 2
+			var y := 3 + i * 2 + (i % 2)
+			_tile_rect(x - 1, y, 4, 3, Color("263b35"))
+			_tile_rect(x, y, 2, 3, Color("587d54"))
+			_tile_rect(x, y, 1, 2, Color("a3b874"))
+		_tile_rect(9, 4, 3, 2, Color("6b9a66"))
 	elif kind == 4:
-		ellipse(Vector2(0.5, 0.52), Vector2(0.3, 0.37), Color(0.16, 0.3, 0.28, 0.35))
-		curved_stroke(Vector2(0.3, 0.18), Vector2(0.57, 0.35), Vector2(0.25, 0.6), Vector2(0.65, 0.82), Color("467b79"), 0.065)
-		curved_stroke(Vector2(0.3, 0.18), Vector2(0.57, 0.35), Vector2(0.25, 0.6), Vector2(0.65, 0.82), Color("9ab7a8"), 0.016)
+		for i in range(3):
+			var x := 4 + i * 3
+			var y := 4 + i * 2
+			_tile_rect(x, y, 2, 5, Color("416e90"))
+			_tile_rect(x, y, 1, 4, Color("7fbed0"))
+			_tile_rect(x, y - 1, 1, 1, Color("c1e5df"))
 	canvas.draw_set_transform(Vector2.ZERO)
 
 func ground_growth(cell: Vector2i, pos: Vector2, unit: float, occupied: bool) -> void:
 	canvas.draw_set_transform(pos, 0, Vector2.ONE * unit)
 	var seed_value := posmod(cell.x * 23 + cell.y * 37, 11)
 	if not occupied and seed_value < 5:
-		fern(Vector2(0.5, 0.04), 0.32 + seed_value * 0.045, seed_value * 0.2)
+		for i in range(4):
+			var x := 4 + i * 2
+			var height := 3 + posmod(seed_value + i, 4)
+			_tile_rect(x, -height, 1, height, Color("437a63"))
+			_tile_rect(x - 1, -height, 3, 1, Color("9bd0a1"))
+			_tile_rect(x - 1, -height + 2, 2, 1, Color("62a883"))
 	elif not occupied and seed_value < 8:
-		mushroom(Vector2(0.35, 0), 0.43, Color("d8a763"))
-		mushroom(Vector2(0.7, 0.015), 0.27, Color("a7bc81"))
+		_pixel_mushroom(4, 0, 5, Color("dc9e61"))
+		_pixel_mushroom(11, 0, 3, Color("86c8b0"))
 	else:
 		for i in range(3):
-			var x := 0.13 + i * 0.32
-			leaf(Vector2(x, 0.02), Vector2(x - 0.1, -0.13), 0.035, MOSS)
-			leaf(Vector2(x, 0.02), Vector2(x + 0.07, -0.18), 0.035, Color("9aaf74"))
+			var x := 2 + i * 5
+			_tile_rect(x, -2 - i % 2, 1, 3, MOSS)
+			_tile_rect(x + 1, -1 - i % 2, 1, 2, Color("75b78d"))
 	canvas.draw_set_transform(Vector2.ZERO)
+
+func _pixel_mushroom(x: int, y: int, height: int, cap: Color) -> void:
+	_tile_rect(x, y - height, 1, height, Color("b5c5b1"))
+	_tile_rect(x - 2, y - height, 5, 2, Color("34514a"))
+	_tile_rect(x - 2, y - height - 1, 5, 1, cap)
+	_tile_rect(x - 1, y - height - 2, 3, 1, cap)
+	_tile_rect(x - 1, y - height - 1, 1, 1, Color("f6d99c"))
 
 func ceiling_growth(cell: Vector2i, pos: Vector2, unit: float) -> void:
 	if posmod(cell.x * 17 + cell.y * 31, 5) > 1:
 		return
 	canvas.draw_set_transform(pos, 0, Vector2.ONE * unit)
-	var length := 0.6 + posmod(cell.x * 7, 6) * 0.15
-	stroke([Vector2(0.25, 0.92), Vector2(0.34, 1.22), Vector2(0.21, 1.5), Vector2(0.4, 1.0 + length)], Color("556a49"), 0.045)
-	for i in range(4):
-		var anchor := Vector2(0.3, 1.1 + i * length * 0.21)
-		leaf(anchor, anchor + Vector2(-0.16, 0.19), 0.08, Color("6f8957"))
-		leaf(anchor, anchor + Vector2(0.19, 0.13), 0.07, Color("899c63"))
+	var length := 8 + posmod(cell.x * 7, 6) * 2
+	for i in range(length):
+		var x := 5 + (i / 4) % 2
+		_tile_rect(x, 15 + i, 1, 1, Color("355a51"))
+		if i % 4 == 1:
+			_tile_rect(x - 2, 15 + i, 2, 2, Color("467963"))
+			_tile_rect(x + 1, 16 + i, 2, 1, Color("78ac7e"))
 	canvas.draw_set_transform(Vector2.ZERO)
-
-func fern(base: Vector2, scale_value: float, phase: float = 0) -> void:
-	for branch in range(5):
-		var angle := -PI * 0.5 + (branch - 2) * 0.43
-		var tip := base + Vector2(cos(angle), sin(angle)) * scale_value * (1.0 - absf(branch - 2) * 0.1)
-		stroke([base, base.lerp(tip, 0.45) + Vector2(0.03 * sin(phase), 0), tip], Color("657f4c"), 0.025)
-		for i in range(1, 5):
-			var anchor := base.lerp(tip, i / 6.0)
-			var direction := (tip - base).normalized()
-			var normal := Vector2(-direction.y, direction.x)
-			var length := scale_value * (0.29 - i * 0.035)
-			leaf(anchor, anchor + normal * length + direction * 0.1, length * 0.24, Color("9bab69") if branch % 2 == 0 else Color("719561"))
-			leaf(anchor, anchor - normal * length + direction * 0.1, length * 0.24, Color("b1be7d") if branch % 2 == 0 else Color("88a56a"))
-
-func mushroom(base: Vector2, height: float, cap: Color) -> void:
-	stroke([base, base + Vector2(-height * 0.04, -height * 0.4), base + Vector2(height * 0.03, -height * 0.78)], Color("a2a37c"), height * 0.13)
-	ellipse(base + Vector2(0, -height * 0.76), Vector2(height * 0.38, height * 0.11), Color("736b49"))
-	ellipse(base + Vector2(0, -height * 0.87), Vector2(height * 0.42, height * 0.23), cap)
-	ellipse(base + Vector2(-height * 0.1, -height * 0.96), Vector2(height * 0.24, height * 0.09), cap.lightened(0.25))
-	for i in range(3):
-		canvas.draw_circle(base + Vector2((i - 1) * height * 0.15, -height * 0.9), height * 0.025, Color("f3db9b"))
 
 func ladder(pos: Vector2, unit: float) -> void:
 	canvas.draw_set_transform(pos, 0, Vector2.ONE * unit)
-	for x in [0.26, 0.74]:
-		stroke([Vector2(x, -0.03), Vector2(x - 0.02, 0.45), Vector2(x, 1.03)], Color("504a35"), 0.11)
-		stroke([Vector2(x - 0.02, -0.03), Vector2(x - 0.03, 0.45), Vector2(x - 0.02, 1.03)], Color("b7a36d"), 0.036)
-	for i in range(3):
-		var y := 0.15 + i * 0.34
-		stroke([Vector2(0.21, y), Vector2(0.52, y - 0.015), Vector2(0.79, y + 0.02)], Color("7b7150"), 0.1)
-		canvas.draw_line(Vector2(0.25, y - 0.025), Vector2(0.75, y - 0.025), Color("d1bd82"), 0.025, true)
-		for x in [0.27, 0.73]:
-			stroke([Vector2(x - 0.05, y - 0.07), Vector2(x + 0.045, y + 0.07)], Color("c2b58a"), 0.028)
+	for x in [4, 11]:
+		_tile_rect(x - 1, 0, 3, 16, Color("222536"))
+		_tile_rect(x, 0, 1, 16, Color("b77b59"))
+		_tile_rect(x + 1, 0, 1, 16, Color("674953"))
+	for y in [2, 7, 12]:
+		_tile_rect(4, y, 8, 2, Color("704d4e"))
+		_tile_rect(4, y, 8, 1, Color("e4b57c"))
+		_tile_rect(4, y, 1, 1, Color("ffe0a0"))
 	canvas.draw_set_transform(Vector2.ZERO)
 
 func settler(pos: Vector2, unit: float, colonist: Dictionary, clock: float, facing: float) -> void:
-	canvas.draw_set_transform(pos, 0, Vector2.ONE * unit)
-	var index := int(colonist.id) % 4
-	var coat: Color = [Color("c9a46b"), Color("69a9a7"), Color("b97e80"), Color("a1ad73")][index]
-	var skin: Color = [Color("e1b58b"), Color("b68161"), Color("e6c3a0"), Color("c89f78")][index]
-	var hair: Color = [Color("72513c"), Color("3d3631"), Color("8e6146"), Color("5c4939")][index]
-	var path: Array = colonist.get("path", [])
-	var walk_weight: float = colonist.get("visual_walk_weight", 1.0 if not path.is_empty() else 0.0)
-	var work_weight: float = colonist.get("visual_work_weight", 0.0)
-	var climb_weight: float = colonist.get("visual_climb_weight", 0.0)
-	var phase: float = colonist.get("visual_phase", clock * 8.0 + index)
-	var resting: bool = colonist.get("visual_resting", false)
-	var digging := bool(colonist.get("visual_digging", false))
-	var dig := DiggingMotion.pose(float(colonist.get("visual_dig_clock", 0.0)), Vector2(colonist.get("visual_dig_target", Vector2.RIGHT)), facing) if digging else {}
-	var body: Vector2 = dig.body_offset if digging else Vector2.ZERO
-	var stride := sin(phase) * 0.13 * walk_weight * (1.0 - climb_weight)
-	var breath := sin(clock * 2.0 + index) * 0.012
-	ellipse(Vector2(0.5, 0.99), Vector2(0.37, 0.075), Color(0.03, 0.08, 0.07, 0.48))
-	if not colonist.alive or resting:
-		ellipse(Vector2(0.5, 0.78), Vector2(0.42, 0.15), coat.darkened(0.1))
-		ellipse(Vector2(0.17, 0.7), Vector2(0.17, 0.17), skin)
-		stroke([Vector2(0.09, 0.72), Vector2(0.19, 0.73)], hair, 0.025)
-		if resting:
-			canvas.draw_arc(Vector2(0.2, 0.38), 0.08, 0.3, 3.0, 8, Color("c3ddbd"), 0.025, true)
-		canvas.draw_set_transform(Vector2.ZERO)
-		return
-	# Distance drives the gait, so faster travel does not slide over a slow foot cycle.
-	for pair in [[0.37, stride, 0.0], [0.65, -stride, PI]]:
-		var x: float = pair[0]
-		var shift: float = pair[1]
-		var lift := maxf(0.0, sin(phase + float(pair[2]))) * (0.055 * walk_weight + 0.2 * climb_weight)
-		stroke([Vector2(x, 0.48) + body, Vector2(x + shift * 0.7 + body.x * 0.5, 0.73 - lift * 0.5 + body.y * 0.5), Vector2(x + shift, 0.91 - lift)], Color("314b46"), 0.17)
-		stroke([Vector2(x - 0.025, 0.51) + body, Vector2(x + shift * 0.7 - 0.025 + body.x * 0.5, 0.73 - lift * 0.5 + body.y * 0.5), Vector2(x + shift - 0.025, 0.86 - lift)], coat.darkened(0.18), 0.09)
-		ellipse(Vector2(x + shift + facing * 0.045, 0.94 - lift), Vector2(0.14, 0.075), Color("403c31"))
-		canvas.draw_line(Vector2(x + shift - 0.09, 0.98 - lift), Vector2(x + shift + 0.11, 0.98 - lift), Color("aa9c76"), 0.025, true)
-	if digging:
-		_digging_arm(dig, "back", coat.darkened(0.18))
-	# The pack, straps, shaped coat, belt and pockets have their own materials.
-	canvas.draw_set_transform(pos + body * unit, 0, Vector2.ONE * unit)
-	ellipse(Vector2(0.5 - facing * 0.26, 0.22), Vector2(0.19, 0.29), Color("3c5144"))
-	ellipse(Vector2(0.49 - facing * 0.28, 0.18), Vector2(0.15, 0.23), Color("998963"))
-	ellipse(Vector2(0.5, 0.2 + breath), Vector2(0.3, 0.36), coat.darkened(0.28))
-	ellipse(Vector2(0.48, 0.15 + breath), Vector2(0.255, 0.31), coat)
-	ellipse(Vector2(0.41, 0.06 + breath), Vector2(0.13, 0.19), coat.lightened(0.15))
-	stroke([Vector2(0.34, -0.04), Vector2(0.4, 0.42)], Color("76664c"), 0.065)
-	stroke([Vector2(0.65, -0.04), Vector2(0.62, 0.42)], Color("76664c"), 0.065)
-	stroke([Vector2(0.25, 0.42), Vector2(0.5, 0.45), Vector2(0.76, 0.42)], Color("60503b"), 0.08)
-	canvas.draw_rect(Rect2(0.46, 0.405, 0.1, 0.085), Color("d6bd7c"))
-	ellipse(Vector2(0.68, 0.37), Vector2(0.09, 0.12), coat.darkened(0.18))
-	# Walking, climbing and building keep their existing relaxed arm poses.
-	var arm_tip := Vector2(0.82, 0.38 - stride)
-	var swing := sin(clock * 5.0 + index)
-	arm_tip = arm_tip.lerp(Vector2(0.8, 0.08 + sin(phase) * 0.24), climb_weight)
-	var building_weight := work_weight if str(colonist.get("task", "")).begins_with("Building") else 0.0
-	arm_tip = arm_tip.lerp(Vector2(0.87 + swing * 0.06, 0.02 + swing * 0.2), building_weight)
-	var other_hand := Vector2(0.2, 0.36 + stride).lerp(Vector2(0.2, 0.08 - sin(phase) * 0.24), climb_weight)
-	if not digging:
-		stroke([Vector2(0.73, 0.04), Vector2(0.83, 0.2), arm_tip], coat.darkened(0.1), 0.15)
-		ellipse(arm_tip, Vector2(0.09, 0.09), skin)
-		stroke([Vector2(0.27, 0.06), Vector2(0.18, 0.2), other_hand], coat.darkened(0.18), 0.14)
-		ellipse(other_hand, Vector2(0.075, 0.08), skin)
-	if building_weight > 0.001:
-		stroke([arm_tip + Vector2(-0.08, 0.17), arm_tip + Vector2(0.15, -0.24)], Color(Color("a18c5c"), work_weight), 0.055)
-		stroke([arm_tip + Vector2(0, -0.29), arm_tip + Vector2(0.15, -0.24), arm_tip + Vector2(0.31, -0.16)], Color(Color("b7c3b5"), work_weight), 0.08)
-	if digging:
-		canvas.draw_set_transform(pos + (body + Vector2(dig.head_offset)) * unit, 0, Vector2.ONE * unit)
-	# Large faces remain readable when zoomed out, with cheek, nose and eye highlights.
-	ellipse(Vector2(0.5, -0.18 + breath), Vector2(0.25, 0.26), hair)
-	ellipse(Vector2(0.51 + facing * 0.025, -0.15 + breath), Vector2(0.225, 0.24), skin)
-	ellipse(Vector2(0.42, -0.2 + breath), Vector2(0.13, 0.17), skin.lightened(0.12))
-	ellipse(Vector2(0.5 + facing * 0.23, -0.13 + breath), Vector2(0.07, 0.055), skin.darkened(0.06))
-	var eye_x := 0.5 + facing * 0.13
-	ellipse(Vector2(eye_x, -0.2 + breath), Vector2(0.025, 0.04), Color("273d36"))
-	canvas.draw_circle(Vector2(eye_x - 0.007, -0.215 + breath), 0.009, Color("fff2d5"))
-	ellipse(Vector2(eye_x, -0.07 + breath), Vector2(0.06, 0.028), Color("cf9179"))
-	stroke([Vector2(eye_x - 0.035, -0.29 + breath), Vector2(eye_x + 0.04, -0.28 + breath)], hair, 0.025)
-	# Leather exploration cap, stitched brim, copper headlamp and warm glass.
-	ellipse(Vector2(0.49, -0.36 + breath), Vector2(0.27, 0.16), coat.darkened(0.23))
-	ellipse(Vector2(0.45, -0.4 + breath), Vector2(0.21, 0.1), coat.lightened(0.1))
-	stroke([Vector2(0.23, -0.3 + breath), Vector2(0.52, -0.29 + breath), Vector2(0.79, -0.31 + breath)], Color("8b704e"), 0.055)
-	var lamp := Vector2(0.5 + facing * 0.22, -0.35 + breath)
-	ellipse(lamp, Vector2(0.09, 0.095), Color("766349"))
-	ellipse(lamp, Vector2(0.06, 0.065), Color("f2d69d"))
-	canvas.draw_circle(lamp + Vector2(-0.015, -0.025), 0.028, Color("fff4cc"))
-	if digging:
-		canvas.draw_set_transform(pos, 0, Vector2.ONE * unit)
-		_digging_arm(dig, "front", coat)
-		_digging_tool(dig, skin, work_weight)
-	canvas.draw_set_transform(Vector2.ZERO)
+	PixelSettler.draw(self, pos, unit, colonist, clock, facing)
 
 func _digging_arm(pose: Dictionary, side: String, coat: Color) -> void:
 	var shoulder: Vector2 = pose["shoulder_" + side]

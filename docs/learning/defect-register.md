@@ -1,5 +1,11 @@
 # Defect register
 
+## ML-V2 - Object proportions and flat build controls do not scale (2026-11-07)
+
+**Reported symptom:** Furniture and machinery looked implausibly tiny or oversized, and permanently numbered buttons for every object would not scale with the catalog.
+
+**Repair and regression scope:** Buildings now reserve their complete grid footprint, with shared bottom-left anchors for placement, inspection, previews, cancellation, construction and foundation protection. Beds span two tiles, machinery spans two by two, and the beacon spans two by three. Renderer tests check complete preview geometry at multiple zooms, sprite fit and substantial furniture dimensions; simulation tests cover all occupied cells and both support columns, overlap, cancellation/refund and invalidation during assignment, work and completion. Build controls are organized into categories with focused item lists; UI and real-input acceptance cover navigation and catalog reachability. Rendered acceptance caught unbounded menu/detail content: at 720x560 the build scroll viewport extended below the window, and at 150% scale a long selected-item description enlarged the cave beyond the screen before Cancel shrank it, moving the target under a stationary pointer. Layout bounds and stable desktop world coordinates are now explicit regression criteria. Native testing also found that routing repeatedly used the general footprint lookup merely to find 1x1 ladder segments, producing 3x simulation spikes. A direct ladder kind/anchor query preserves routes without cached state; a same-state profile and ladder lifecycle tests verify the repair, and native timing is rechecked on the final build. Final acceptance is recorded in work 3.
+
 ## ML-A3 — Mid-swing arms stretched and the pick crossed the head
 
 **Reported symptom and missed check:** The owner points out that the delivered Swing frame looks weird. The guided tip and independently rotating shaft could move hands beyond the character's shoulder reach. The artist invented elbows with a midpoint offset, left shoulders unmirrored, and hid forearms behind the face before drawing hands/tool on top. Earlier rigidity/contact tests passed those anatomically implausible poses.

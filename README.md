@@ -1,6 +1,6 @@
 # Mosslight
 
-Mosslight is a small 2D colony survival game set in an illustrated living cave. Four settlers dig, build, and balance food, water, breathable air, and power. This repository, `yanfengliu/platsim`, is the home of the game.
+Mosslight is a small 2D colony survival game set in a pixel-art living cave. Four settlers dig, build, and balance food, water, breathable air, and power. This repository, `yanfengliu/platsim`, is the home of the game.
 
 ![Mosslight gameplay: four settlers grow a lit cave habitat, manage supplies, and dig toward the quarry.](docs/images/gameplay.jpg)
 
@@ -10,7 +10,7 @@ Mosslight is a small 2D colony survival game set in an illustrated living cave. 
 
 Open `mosslight/project.godot` in Godot 4.7.2 (standard GDScript edition), then press F5. The project supports Windows, macOS, and web exports. Native Mac execution has not been tested on this Windows machine. See [setup, controls and exports](mosslight/README.md).
 
-Escape opens the pause menu and Settings. UI scaling runs from 100% to 200% where the window has room. Space pauses; 1x/3x controls time. Digging has a two-handed swing, rock impact, recoil, and chips. There are no live-game saves in this prototype.
+Build (B) opens categories, then items with sizes and costs. Beds, machinery and tall equipment occupy appropriately sized multi-tile footprints. Escape opens the pause menu and Settings. UI scaling runs from 100% to 200% where the window has room. Space pauses; 1x/3x controls time. Digging has a two-handed swing, rock impact, recoil, and chips. There are no live-game saves in this prototype.
 
 ## Development
 
@@ -24,7 +24,7 @@ npm run build
 npm run dev
 ```
 
-The five headless Godot suites cover simulation, presentation motion, digging anatomy, UI settings, and terrain caching. `npm run build` creates the web export; `npm run dev` serves it at localhost:4180. Stop the server with Ctrl+C. Native exports use `npm run export:windows` and `npm run export:macos`.
+The six headless Godot suites cover simulation, presentation motion, digging anatomy, UI settings, terrain caching, and pixel-art assets. `npm run build` creates the web export; `npm run dev` serves it at localhost:4180. Stop the server with Ctrl+C. Native exports use `npm run export:windows` and `npm run export:macos`.
 
 The gameplay image stays in step with the game: `npm run check` and CI reject an outdated capture when game source, scenes, settings, or artwork change. [Refresh the image](docs/images/README.md) from a fresh build, inspect it, and commit the image and its manifest with the change. Documentation and test-only edits do not require a new capture.
 
