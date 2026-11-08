@@ -2,6 +2,10 @@
 
 Mosslight is a small 2D colony survival game set in an illustrated living cave. Four settlers dig, build, and balance food, water, breathable air, and power. This repository, `yanfengliu/platsim`, is the home of the game.
 
+![Mosslight gameplay: four settlers grow a lit cave habitat, manage supplies, and dig toward the quarry.](docs/images/gameplay.jpg)
+
+*Current in-game capture: new mushrooms and an airfern beside the glow lamp, with excavation underway below the colony.*
+
 ## Play and edit
 
 Open `mosslight/project.godot` in Godot 4.7.2 (standard GDScript edition), then press F5. The project supports Windows, macOS, and web exports. Native Mac execution has not been tested on this Windows machine. See [setup, controls and exports](mosslight/README.md).
@@ -21,6 +25,8 @@ npm run dev
 ```
 
 The five headless Godot suites cover simulation, presentation motion, digging anatomy, UI settings, and terrain caching. `npm run build` creates the web export; `npm run dev` serves it at localhost:4180. Stop the server with Ctrl+C. Native exports use `npm run export:windows` and `npm run export:macos`.
+
+The gameplay image stays in step with the game: `npm run check` and CI reject an outdated capture when game source, scenes, settings, or artwork change. [Refresh the image](docs/images/README.md) from a fresh build, inspect it, and commit the image and its manifest with the change. Documentation and test-only edits do not require a new capture.
 
 ## Repository contents
 
