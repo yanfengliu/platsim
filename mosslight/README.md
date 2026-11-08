@@ -14,6 +14,8 @@ Choose **Enter the hollow** on the title screen. Dig into the cave, provide lit 
 
 The on-screen help lists the current keyboard and mouse controls. Space pauses; 1x and 3x buttons change speed; the air overlay explains room conditions. Construction costs are shown before placement. A new expedition starts a fresh colony. Live-game saving is outside this first prototype's scope.
 
+Press Escape or choose Menu to pause the action and open Settings or Help. Escape backs out through those screens and returns to your previous play or pause state. Settings enlarges text, buttons, and spacing; the available scale choices depend on window size, and the displayed limit keeps controls reachable. Reset returns to 100%. Settings last for the current session. Settler movement is drawn smoothly between simulation updates without changing job timing or survival rules.
+
 For a gentle first expedition, add mushrooms and an airfern beside the existing glow lamp in Lantern Hollow. Dig the ore plug below the central ladder, then extend that ladder three tiles down into Root Quarry. Gather its ore and the root deposit for generator fuel before building the beacon near the lamp. The upper roost, middle ledge, hollow, and quarry are connected by real walking and climbing routes.
 
 | Action | Controls |
@@ -24,7 +26,8 @@ For a gentle first expedition, add mushrooms and an airfern beside the existing 
 | Use selected tool | Left click; drag with Dig to mark multiple tiles |
 | Move tile cursor / use tool from keyboard | Arrow keys / Enter |
 | Cancel a queued job | X, then click its tile or press Enter |
-| Return to inspection | Escape or right click |
+| Return to inspection | 0 or right click |
+| Open menu / go back | Escape |
 | Pause / show air / help | Space / V / H |
 | Pan / zoom / center colony | WASD or middle drag / mouse wheel / Home |
 | Navigate buttons | Tab and Shift+Tab, then Enter |
@@ -42,7 +45,7 @@ node mosslight/tools/godot.mjs export-windows
 node mosslight/tools/godot.mjs export-macos
 ```
 
-`verify` runs import, simulation tests, and web export together. `--out <path>` overrides an export's output file. Exports use an isolated temporary copy of the Godot project, so task-local template paths are never written to tracked presets. Temporary staging is removed even after an export failure. Godot is run headlessly, with hidden Windows child processes and a bounded timeout. CI repeats import and simulation tests with a checksum-pinned Godot runtime.
+`test` runs the simulation, motion-presentation, UI-settings, and terrain-cache checks. `verify` runs import, those four suites, and web export together. `--out <path>` overrides an export's output file. Exports use an isolated temporary copy of the Godot project, so task-local template paths are never written to tracked presets. Temporary staging is removed even after an export failure. Godot is run headlessly, with hidden Windows child processes and a bounded timeout. CI repeats import and all four suites with a checksum-pinned Godot runtime. Native frame pacing and motion need a real GPU-rendered run; headless Godot uses a dummy renderer and cannot establish that result.
 
 Web output is written under ignored `output/mosslight-web/`; Windows and Mac artifacts go under ignored `output/mosslight-desktop/`. Launch `Mosslight.exe` on Windows, or unzip the Mac archive and open its `.app` on macOS. Serve the web output over localhost rather than opening its HTML as a file:
 

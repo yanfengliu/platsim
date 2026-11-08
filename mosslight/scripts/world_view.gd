@@ -7,6 +7,19 @@ class PaintLayer extends Control:
 	func _draw() -> void:
 		owner_view._paint_layer(kind, self)
 
+class TerrainCell extends Node2D:
+	var owner_view: Control
+	var cell: Vector2i
+	var growth := false
+	func _draw() -> void:
+		owner_view._paint_terrain_cell(self, cell, growth)
+
+class TerrainPatch extends Node2D:
+	var texture: Texture2D
+	var draw_size := Vector2.ZERO
+	func _draw() -> void:
+		draw_texture_rect(texture, Rect2(Vector2.ZERO, draw_size), false)
+
 signal cell_activated(cell: Vector2i)
 signal cell_hovered(cell: Vector2i)
 signal cancel_requested
@@ -14,10 +27,13 @@ signal cancel_requested
 const TILE := 28.0
 const MAX_ZOOM := 2.5
 const CACHE_TILE := TILE * MAX_ZOOM
+const TERRAIN_CHUNK := 4
+const CACHE_PADDING := 2
 const INK := Color("08171e")
 const MINT := Color("7fe0b0")
 const GOLD := Color("e8bb73")
 const CaveArt = preload("res://scripts/cave_art.gd")
+const PresentationMotion = preload("res://scripts/presentation_motion.gd")
 const BACKDROP = preload("res://assets/illustration/cavern-backdrop.webp")
 const BUILDINGS_UPPER = preload("res://assets/illustration/buildings-upper.webp")
 const BUILDINGS_LOWER = preload("res://assets/illustration/buildings-lower.webp")
@@ -37,8 +53,19 @@ var _dig_drag := false
 var _dig_view_rect := Rect2()
 var _last_drag_cell := Vector2i(-1, -1)
 var _clock := 0.0
+var _motion := PresentationMotion.new()
 var _font: Font
 var _terrain_art: RefCounted
+var _terrain_cells := {}
+var _terrain_signatures := {}
+var _terrain_redraw_count := 0
+var _terrain_rock_group: Node2D
+var _terrain_growth_group: Node2D
+var _terrain_dimensions := Vector2i.ZERO
+var _terrain_occupied := {}
+var _terrain_chunks := {}
+var _terrain_chunk_redraw_count := 0
+var _terrain_surface: Control
 var _infrastructure_art: RefCounted
 var _dynamic_art: RefCounted
 var _terrain_viewport: SubViewport
@@ -71,6 +98,14 @@ func _ready() -> void:
 	_terrain_painter = terrain.painter
 	_terrain_display = terrain.display
 	_terrain_art = CaveArt.new(_terrain_painter)
+	_terrain_display.visible = false
+	_terrain_surface = Control.new()
+	_terrain_surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_terrain_surface)
+	_terrain_rock_group = Node2D.new()
+	_terrain_growth_group = Node2D.new()
+	_terrain_painter.add_child(_terrain_rock_group)
+	_terrain_painter.add_child(_terrain_growth_group)
 	_air_layer = _make_painter("air", self)
 	var infrastructure := _make_cache("infrastructure")
 	_infrastructure_viewport = infrastructure.viewport
@@ -79,14 +114,33 @@ func _ready() -> void:
 	_infrastructure_art = CaveArt.new(_infrastructure_painter)
 	_dynamic_layer = _make_painter("dynamic", self)
 	_dynamic_art = CaveArt.new(_dynamic_layer)
+	reset_motion()
 
-func _process(delta: float) -> void:
-	if not reduced_motion and not simulation_paused:
-		_clock += minf(delta, 0.1)
+func _process(_delta: float) -> void:
 	_stabilize_dig_view()
 	_refresh_caches()
 	_air_layer.queue_redraw()
 	_dynamic_layer.queue_redraw()
+
+func reset_motion() -> void:
+	if simulation:
+		_motion.reset(simulation.colonists)
+	# A reset may reuse the same elapsed time with different terrain.
+	_observed_time = -1.0
+	_clock = 0.0
+	_last_positions.clear()
+	_facing.clear()
+
+func begin_simulation_step() -> void:
+	_motion.begin_step(simulation.colonists)
+
+func end_simulation_step() -> void:
+	_motion.end_step(simulation.colonists)
+
+func present_frame(alpha: float, delta: float, simulation_speed: float, running: bool) -> void:
+	_motion.present(alpha, delta, simulation_speed, running, reduced_motion)
+	if running and not reduced_motion:
+		_clock += delta * simulation_speed
 
 func _make_painter(kind: String, parent_node: Node) -> PaintLayer:
 	var painter := PaintLayer.new()
@@ -105,6 +159,8 @@ func _make_cache(kind: String) -> Dictionary:
 	viewport.handle_input_locally = false
 	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	viewport.size = Vector2i.ONE
+	if kind == "terrain":
+		viewport.world_2d = World2D.new()
 	add_child(viewport)
 	var painter := _make_painter(kind, viewport)
 	var display := TextureRect.new()
@@ -139,10 +195,8 @@ func _refresh_caches() -> void:
 	# resizing only transform these textures; even the closest view loses no detail.
 	var pixel_size := Vector2i(ceili(simulation.width * CACHE_TILE), ceili(simulation.height * CACHE_TILE))
 	if _terrain_hash != _cached_terrain_hash:
-		_terrain_viewport.size = pixel_size
 		_terrain_painter.size = Vector2(pixel_size)
-		_terrain_painter.queue_redraw()
-		_terrain_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+		_refresh_terrain_cells()
 		_cached_terrain_hash = _terrain_hash
 	if _infrastructure_hash != _cached_infrastructure_hash:
 		_infrastructure_viewport.size = pixel_size
@@ -152,9 +206,9 @@ func _refresh_caches() -> void:
 		_cached_infrastructure_hash = _infrastructure_hash
 	if view_changed:
 		var unit := TILE * zoom_level
-		for display in [_terrain_display, _infrastructure_display]:
-			display.position = size * 0.5 - camera * unit
-			display.size = Vector2(simulation.width, simulation.height) * unit
+		_infrastructure_display.position = size * 0.5 - camera * unit
+		_infrastructure_display.size = Vector2(simulation.width, simulation.height) * unit
+		_position_terrain_chunks()
 		queue_redraw()
 	_cached_camera = camera
 	_cached_zoom = zoom_level
@@ -164,7 +218,7 @@ func _paint_layer(kind: String, surface: CanvasItem) -> void:
 	if not simulation:
 		return
 	match kind:
-		"terrain": _paint_terrain()
+		"terrain": pass # Per-cell draw lists are retained below this layer.
 		"infrastructure": _paint_infrastructure(surface)
 		"air": _paint_air(surface)
 		"dynamic": _paint_dynamic(surface)
@@ -279,7 +333,7 @@ func _inspect_cell(point: Vector2) -> Vector2i:
 	var unit := TILE * zoom_level
 	for index in range(simulation.colonists.size() - 1, -1, -1):
 		var colonist: Dictionary = simulation.colonists[index]
-		var pos := cell_screen(Vector2(colonist.pos)) - Vector2.ONE * unit * 0.5
+		var pos := cell_screen(Vector2(_motion.pose(colonist).pos)) - Vector2.ONE * unit * 0.5
 		var bounds := Rect2(pos + Vector2(-0.03, -0.59) * unit, Vector2(1.25, 1.65) * unit)
 		if bounds.has_point(point):
 			return Vector2i(Vector2(colonist.pos).floor())
@@ -309,30 +363,118 @@ func _draw() -> void:
 	draw_texture_rect(BACKDROP, Rect2((size - backdrop_size) * 0.5 + parallax, backdrop_size), false, Color(0.86, 0.94, 0.87, 1))
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.025, 0.09, 0.085, 0.1))
 
-func _paint_terrain() -> void:
-	var unit := CACHE_TILE
-	var occupied := {}
+func _refresh_terrain_cells() -> void:
+	var dimensions := Vector2i(simulation.width, simulation.height)
+	if dimensions != _terrain_dimensions:
+		for pair in _terrain_cells.values():
+			for painter in pair:
+				painter.get_parent().remove_child(painter)
+				painter.queue_free()
+		_terrain_cells.clear()
+		_terrain_signatures.clear()
+		_terrain_dimensions = dimensions
+		_rebuild_terrain_chunks(dimensions)
+	_terrain_occupied.clear()
 	for building in simulation.buildings:
-		occupied[building.cell] = true
-	for y in range(simulation.height):
-		for x in range(simulation.width):
-			var kind: int = simulation.tiles[y][x]
-			if kind > 0:
-				var cell := Vector2i(x, y)
-				var pos := Vector2(cell) * unit
-				var exposed := Vector4(float(_open(cell + Vector2i.UP)), float(_open(cell + Vector2i.DOWN)), float(_open(cell + Vector2i.LEFT)), float(_open(cell + Vector2i.RIGHT)))
-				_terrain_art.rock(cell, pos, unit, kind, exposed)
-	# Plant dressing is anchored to true floor/ceiling surfaces, never imaginary terrain.
+		_terrain_occupied[building.cell] = true
+	var dirty_chunks := {}
+	# Keep Godot's retained drawing commands for unchanged cells. Rebuilding the
+	# complete cave's vector art on every dig used to stall the main thread.
 	for y in range(simulation.height):
 		for x in range(simulation.width):
 			var cell := Vector2i(x, y)
-			if simulation.tiles[y][x] == 0:
-				continue
-			var pos := Vector2(cell) * unit
-			if _open(cell + Vector2i.UP):
-				_terrain_art.ground_growth(cell, pos, unit, occupied.has(cell + Vector2i.UP))
-			if _open(cell + Vector2i.DOWN):
-				_terrain_art.ceiling_growth(cell, pos, unit)
+			if not _terrain_cells.has(cell):
+				var pair := []
+				for growth in [false, true]:
+					var painter := TerrainCell.new()
+					painter.owner_view = self
+					painter.cell = cell
+					painter.growth = growth
+					(_terrain_growth_group if growth else _terrain_rock_group).add_child(painter)
+					pair.append(painter)
+				_terrain_cells[cell] = pair
+			var kind: int = simulation.tiles[y][x]
+			var signature := [kind, _open(cell + Vector2i.UP), _open(cell + Vector2i.DOWN), _open(cell + Vector2i.LEFT), _open(cell + Vector2i.RIGHT), _terrain_occupied.has(cell + Vector2i.UP)] if kind > 0 else [0]
+			if _terrain_signatures.get(cell) != signature:
+				_terrain_signatures[cell] = signature
+				_terrain_redraw_count += 1
+				for painter in _terrain_cells[cell]:
+					painter.queue_redraw()
+				# Include the complete art footprint: grass above, side outlines,
+				# and ceiling vines reaching more than two cells below their anchor.
+				for affected_y in range(cell.y - 1, cell.y + 3):
+					for affected_x in range(cell.x - 1, cell.x + 2):
+						if affected_x >= 0 and affected_y >= 0 and affected_x < dimensions.x and affected_y < dimensions.y:
+							var key := Vector2i(affected_x / TERRAIN_CHUNK, affected_y / TERRAIN_CHUNK)
+							dirty_chunks[key] = true
+	for key in dirty_chunks:
+		_terrain_chunks[key].viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+		_terrain_chunk_redraw_count += 1
+
+func _rebuild_terrain_chunks(dimensions: Vector2i) -> void:
+	for chunk in _terrain_chunks.values():
+		for node in [chunk.display, chunk.viewport]:
+			node.get_parent().remove_child(node)
+			node.queue_free()
+	_terrain_chunks.clear()
+	for y in range(0, dimensions.y, TERRAIN_CHUNK):
+		for x in range(0, dimensions.x, TERRAIN_CHUNK):
+			var region := Rect2i(x, y, mini(TERRAIN_CHUNK, dimensions.x - x), mini(TERRAIN_CHUNK, dimensions.y - y))
+			var viewport := SubViewport.new()
+			viewport.disable_3d = true
+			viewport.transparent_bg = true
+			viewport.handle_input_locally = false
+			viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+			# Share retained geometry, but rasterize only the changed small regions.
+			viewport.world_2d = _terrain_viewport.world_2d
+			var pixels := Vector2i(Vector2(region.size) * CACHE_TILE)
+			var core := Rect2i(Vector2i(Vector2(region.position) * CACHE_TILE), pixels)
+			var bounds := Rect2i(Vector2i.ZERO, Vector2i(Vector2(dimensions) * CACHE_TILE))
+			var raster := core.grow(CACHE_PADDING).intersection(bounds)
+			viewport.size = raster.size
+			_terrain_surface.add_child(viewport)
+			# Entering the tree attaches the shared canvas before its transform is set.
+			viewport.canvas_transform = Transform2D(0.0, -Vector2(raster.position))
+			var texture := AtlasTexture.new()
+			texture.atlas = viewport.get_texture()
+			texture.region = Rect2(Vector2(core.position - raster.position), Vector2(pixels))
+			# The surrounding texel preserves linear filtering across region edges.
+			# Outer map edges keep the original full texture's clamped sampling.
+			texture.filter_clip = false
+			var display := TerrainPatch.new()
+			display.texture = texture
+			display.material = _terrain_display.material
+			_terrain_surface.add_child(display)
+			_terrain_chunks[Vector2i(x / TERRAIN_CHUNK, y / TERRAIN_CHUNK)] = {"viewport": viewport, "display": display, "region": region, "raster": raster}
+	_position_terrain_chunks()
+
+func _position_terrain_chunks() -> void:
+	var unit := TILE * zoom_level
+	# Snap the common origin once, as the original full texture did. Individual
+	# patches are Node2Ds so GUI Control snapping cannot open fractional-zoom gaps.
+	_terrain_surface.position = size * 0.5 - camera * unit
+	for chunk in _terrain_chunks.values():
+		chunk.display.position = Vector2(chunk.region.position) * unit
+		chunk.display.draw_size = Vector2(chunk.region.size) * unit
+		chunk.display.queue_redraw()
+
+func _paint_terrain_cell(surface: CanvasItem, cell: Vector2i, growth: bool) -> void:
+	var kind: int = simulation.tiles[cell.y][cell.x]
+	if kind == 0:
+		return
+	var unit := CACHE_TILE
+	var pos := Vector2(cell) * unit
+	_terrain_art.canvas = surface
+	if not growth:
+		var exposed := Vector4(float(_open(cell + Vector2i.UP)), float(_open(cell + Vector2i.DOWN)), float(_open(cell + Vector2i.LEFT)), float(_open(cell + Vector2i.RIGHT)))
+		_terrain_art.rock(cell, pos, unit, kind, exposed)
+	else:
+		# Separate parent groups preserve all-rocks-before-all-growth ordering,
+		# including vines that extend across cell boundaries.
+		if _open(cell + Vector2i.UP):
+			_terrain_art.ground_growth(cell, pos, unit, _terrain_occupied.has(cell + Vector2i.UP))
+		if _open(cell + Vector2i.DOWN):
+			_terrain_art.ceiling_growth(cell, pos, unit)
 
 func _paint_air(surface: CanvasItem) -> void:
 	var unit := TILE * zoom_level
@@ -430,15 +572,13 @@ func _draw_building(surface: CanvasItem, art: RefCounted, pos: Vector2, unit: fl
 		surface.draw_circle(pos + Vector2(0.88, -0.1) * unit, unit * 0.035, Color("5e563b"))
 
 func _draw_colonist(surface: CanvasItem, colonist: Dictionary, unit: float) -> void:
-	var point: Vector2 = colonist.pos
+	var display_pose: Dictionary = _motion.pose(colonist)
+	var point: Vector2 = display_pose.pos
 	var id: int = colonist.id
-	if _last_positions.has(id):
-		var delta_x: float = point.x - _last_positions[id].x
-		if absf(delta_x) > 0.001:
-			_facing[id] = signf(delta_x)
+	_facing[id] = float(display_pose.get("visual_facing", 1.0))
 	_last_positions[id] = point
 	var pos := cell_screen(point) - Vector2.ONE * unit * 0.5
-	_dynamic_art.settler(pos, unit, colonist, _clock, float(_facing.get(id, 1.0)))
+	_dynamic_art.settler(pos, unit, display_pose, float(display_pose.get("visual_clock", _clock)), _facing[id])
 	if colonist.health < 70 and colonist.alive:
 		surface.draw_rect(Rect2(pos + Vector2(0.18, -0.69) * unit, Vector2(unit * 0.65, 3)), Color("543e36"))
 		surface.draw_rect(Rect2(pos + Vector2(0.18, -0.69) * unit, Vector2(unit * 0.65 * colonist.health / 100.0, 3)), Color("e9a181"))

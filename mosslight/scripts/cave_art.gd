@@ -153,12 +153,13 @@ func settler(pos: Vector2, unit: float, colonist: Dictionary, clock: float, faci
 	var coat: Color = [Color("c9a46b"), Color("69a9a7"), Color("b97e80"), Color("a1ad73")][index]
 	var skin: Color = [Color("e1b58b"), Color("b68161"), Color("e6c3a0"), Color("c89f78")][index]
 	var hair: Color = [Color("72513c"), Color("3d3631"), Color("8e6146"), Color("5c4939")][index]
-	var task: String = colonist.task
 	var path: Array = colonist.get("path", [])
-	var walking := not path.is_empty()
-	var working := not walking and int(colonist.get("job", -1)) >= 0 and ("Digging" in task or "Building" in task)
-	var resting := bool(colonist.get("resting", false)) or "Resting" in task
-	var stride := sin(clock * 8.0 + index) * 0.13 if walking else 0.0
+	var walk_weight: float = colonist.get("visual_walk_weight", 1.0 if not path.is_empty() else 0.0)
+	var work_weight: float = colonist.get("visual_work_weight", 0.0)
+	var climb_weight: float = colonist.get("visual_climb_weight", 0.0)
+	var phase: float = colonist.get("visual_phase", clock * 8.0 + index)
+	var resting: bool = colonist.get("visual_resting", false)
+	var stride := sin(phase) * 0.13 * walk_weight * (1.0 - climb_weight)
 	var breath := sin(clock * 2.0 + index) * 0.012
 	ellipse(Vector2(0.5, 0.99), Vector2(0.37, 0.075), Color(0.03, 0.08, 0.07, 0.48))
 	if not colonist.alive or resting:
@@ -169,14 +170,15 @@ func settler(pos: Vector2, unit: float, colonist: Dictionary, clock: float, faci
 			canvas.draw_arc(Vector2(0.2, 0.38), 0.08, 0.3, 3.0, 8, Color("c3ddbd"), 0.025, true)
 		canvas.draw_set_transform(Vector2.ZERO)
 		return
-	# Boots and articulated trouser legs stay planted at the authoritative cell's feet.
-	for pair in [[0.37, stride], [0.65, -stride]]:
+	# Distance drives the gait, so faster travel does not slide over a slow foot cycle.
+	for pair in [[0.37, stride, 0.0], [0.65, -stride, PI]]:
 		var x: float = pair[0]
 		var shift: float = pair[1]
-		stroke([Vector2(x, 0.48), Vector2(x + shift * 0.7, 0.73), Vector2(x + shift, 0.91)], Color("314b46"), 0.17)
-		stroke([Vector2(x - 0.025, 0.51), Vector2(x + shift * 0.7 - 0.025, 0.73), Vector2(x + shift - 0.025, 0.86)], coat.darkened(0.18), 0.09)
-		ellipse(Vector2(x + shift + facing * 0.045, 0.94), Vector2(0.14, 0.075), Color("403c31"))
-		canvas.draw_line(Vector2(x + shift - 0.09, 0.98), Vector2(x + shift + 0.11, 0.98), Color("aa9c76"), 0.025, true)
+		var lift := maxf(0.0, sin(phase + float(pair[2]))) * (0.055 * walk_weight + 0.2 * climb_weight)
+		stroke([Vector2(x, 0.48), Vector2(x + shift * 0.7, 0.73 - lift * 0.5), Vector2(x + shift, 0.91 - lift)], Color("314b46"), 0.17)
+		stroke([Vector2(x - 0.025, 0.51), Vector2(x + shift * 0.7 - 0.025, 0.73 - lift * 0.5), Vector2(x + shift - 0.025, 0.86 - lift)], coat.darkened(0.18), 0.09)
+		ellipse(Vector2(x + shift + facing * 0.045, 0.94 - lift), Vector2(0.14, 0.075), Color("403c31"))
+		canvas.draw_line(Vector2(x + shift - 0.09, 0.98 - lift), Vector2(x + shift + 0.11, 0.98 - lift), Color("aa9c76"), 0.025, true)
 	# The pack, straps, shaped coat, belt and pockets have their own materials.
 	ellipse(Vector2(0.5 - facing * 0.26, 0.22), Vector2(0.19, 0.29), Color("3c5144"))
 	ellipse(Vector2(0.49 - facing * 0.28, 0.18), Vector2(0.15, 0.23), Color("998963"))
@@ -190,16 +192,17 @@ func settler(pos: Vector2, unit: float, colonist: Dictionary, clock: float, faci
 	ellipse(Vector2(0.68, 0.37), Vector2(0.09, 0.12), coat.darkened(0.18))
 	# Arms swing while walking and lift a visible implement during work.
 	var arm_tip := Vector2(0.82, 0.38 - stride)
-	if working:
-		var swing := sin(clock * 5.0 + index)
-		arm_tip = Vector2(0.87 + swing * 0.06, 0.02 + swing * 0.2)
+	var swing := sin(clock * 5.0 + index)
+	arm_tip = arm_tip.lerp(Vector2(0.8, 0.08 + sin(phase) * 0.24), climb_weight)
+	arm_tip = arm_tip.lerp(Vector2(0.87 + swing * 0.06, 0.02 + swing * 0.2), work_weight)
 	stroke([Vector2(0.73, 0.04), Vector2(0.83, 0.2), arm_tip], coat.darkened(0.1), 0.15)
 	ellipse(arm_tip, Vector2(0.09, 0.09), skin)
-	stroke([Vector2(0.27, 0.06), Vector2(0.18, 0.2), Vector2(0.2, 0.36 + stride)], coat.darkened(0.18), 0.14)
-	ellipse(Vector2(0.2, 0.36 + stride), Vector2(0.075, 0.08), skin)
-	if working:
-		stroke([arm_tip + Vector2(-0.08, 0.17), arm_tip + Vector2(0.15, -0.24)], Color("a18c5c"), 0.055)
-		stroke([arm_tip + Vector2(0, -0.29), arm_tip + Vector2(0.15, -0.24), arm_tip + Vector2(0.31, -0.16)], Color("b7c3b5"), 0.08)
+	var other_hand := Vector2(0.2, 0.36 + stride).lerp(Vector2(0.2, 0.08 - sin(phase) * 0.24), climb_weight)
+	stroke([Vector2(0.27, 0.06), Vector2(0.18, 0.2), other_hand], coat.darkened(0.18), 0.14)
+	ellipse(other_hand, Vector2(0.075, 0.08), skin)
+	if work_weight > 0.001:
+		stroke([arm_tip + Vector2(-0.08, 0.17), arm_tip + Vector2(0.15, -0.24)], Color(Color("a18c5c"), work_weight), 0.055)
+		stroke([arm_tip + Vector2(0, -0.29), arm_tip + Vector2(0.15, -0.24), arm_tip + Vector2(0.31, -0.16)], Color(Color("b7c3b5"), work_weight), 0.08)
 	# Large faces remain readable when zoomed out, with cheek, nose and eye highlights.
 	ellipse(Vector2(0.5, -0.18 + breath), Vector2(0.25, 0.26), hair)
 	ellipse(Vector2(0.51 + facing * 0.025, -0.15 + breath), Vector2(0.225, 0.24), skin)

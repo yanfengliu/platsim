@@ -102,11 +102,17 @@ async function exportProject(kind) {
   }
 }
 
+async function testProject() {
+  for (const test of ['simulation_test.gd', 'presentation_motion_test.gd', 'ui_settings_test.gd', 'terrain_cache_test.gd']) {
+    await run(['--headless', '--path', project, '--script', `res://tests/${test}`]);
+  }
+}
+
 if (command === 'import') await importProject();
-else if (command === 'test') await run(['--headless', '--path', project, '--script', 'res://tests/simulation_test.gd']);
+else if (command === 'test') await testProject();
 else if (Object.hasOwn(exports, command)) await exportProject(command);
 else if (command === 'verify') {
   await importProject();
-  await run(['--headless', '--path', project, '--script', 'res://tests/simulation_test.gd']);
+  await testProject();
   await exportProject('export-web');
 } else throw new Error(`Unknown command ${command}. Use import, test, verify, export-web, export-windows, or export-macos.`);

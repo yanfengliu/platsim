@@ -2,6 +2,7 @@ extends Control
 
 const Simulation = preload("res://scripts/simulation.gd")
 const WorldView = preload("res://scripts/world_view.gd")
+const UISettings = preload("res://scripts/ui_settings.gd")
 const MINT := Color("9fe6bd")
 const TEXT := Color("dce8d9")
 const MUTED := Color("89a59e")
@@ -47,7 +48,6 @@ var _overlay_card: PanelContainer
 var _overlay_kind := ""
 var _start_button: Button
 var _how_button: Button
-var _focus_before_overlay: Control
 var _current_cell := Vector2i(19, 16)
 var _feedback_remaining := 0.0
 var _last_message := ""
@@ -63,6 +63,15 @@ var _sidebar: VBoxContainer
 var _desktop_layout := false
 var _details_open := false
 var _details_button: Button
+var _menu_button: Button
+var _ui_settings := UISettings.new()
+var _ui_scale := 1.0
+var _scale_rebuild_pending := false
+var _modal_history: Array[Dictionary] = []
+var _overlay_scroll: ScrollContainer
+var _scale_description: Label
+var _scale_buttons := {}
+var _last_layout_state: Array = []
 
 func _ready() -> void:
 	simulation = Simulation.new()
@@ -88,7 +97,7 @@ func _initial_view() -> void:
 
 func _build_theme() -> void:
 	var skin := Theme.new()
-	skin.default_font_size = 14
+	skin.default_font_size = _px(14)
 	skin.set_color("font_color", "Label", TEXT)
 	skin.set_color("font_color", "Button", TEXT)
 	skin.set_color("font_hover_color", "Button", Color("f2f5d8"))
@@ -108,25 +117,25 @@ func _panel(fill: Color, border: Color, radius: int, padding: int, border_width:
 	var box := StyleBoxFlat.new()
 	box.bg_color = fill
 	box.border_color = border
-	box.set_border_width_all(border_width)
-	box.set_corner_radius_all(radius)
-	box.content_margin_left = padding
-	box.content_margin_right = padding
-	box.content_margin_top = padding
-	box.content_margin_bottom = padding
+	box.set_border_width_all(_px(border_width))
+	box.set_corner_radius_all(_px(radius))
+	box.content_margin_left = _px(padding)
+	box.content_margin_right = _px(padding)
+	box.content_margin_top = _px(padding)
+	box.content_margin_bottom = _px(padding)
 	return box
 
 func _label(text_value: String, font_size: int = 14, color: Color = TEXT) -> Label:
 	var label := Label.new()
 	label.text = text_value
-	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_font_size_override("font_size", _px(font_size))
 	label.add_theme_color_override("font_color", color)
 	return label
 
 func _button(text_value: String, action: Callable, key: String = "") -> Button:
 	var button := Button.new()
 	button.text = text_value
-	button.custom_minimum_size.y = 40
+	button.custom_minimum_size.y = _px(40)
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	button.pressed.connect(action)
 	if key != "":
@@ -134,15 +143,18 @@ func _button(text_value: String, action: Callable, key: String = "") -> Button:
 		_controls[key] = button
 	return button
 
+func _px(value: float) -> int:
+	return roundi(value * _ui_scale)
+
 func _build_interface() -> void:
 	_root_margin = MarginContainer.new()
 	_root_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_root_margin)
 	_layout = VBoxContainer.new()
-	_layout.add_theme_constant_override("separation", 10)
+	_layout.add_theme_constant_override("separation", _px(10))
 	_root_margin.add_child(_layout)
 	_header_row = HBoxContainer.new()
-	_header_row.add_theme_constant_override("separation", 16)
+	_header_row.add_theme_constant_override("separation", _px(16))
 	_layout.add_child(_header_row)
 	var branding := VBoxContainer.new()
 	branding.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -153,7 +165,7 @@ func _build_interface() -> void:
 	_subtitle = _label("A little light. A place to belong.", 12, MUTED)
 	branding.add_child(_subtitle)
 	_time_controls = HBoxContainer.new()
-	_time_controls.add_theme_constant_override("separation", 5)
+	_time_controls.add_theme_constant_override("separation", _px(5))
 	_header_row.add_child(_time_controls)
 	_pause_button = _button("Pause", _toggle_pause, "pause")
 	_time_controls.add_child(_pause_button)
@@ -164,11 +176,13 @@ func _build_interface() -> void:
 	_speed_three = _button("3x", func(): _set_speed(3), "speed_3")
 	_speed_three.toggle_mode = true
 	_time_controls.add_child(_speed_three)
-	_time_controls.add_child(_button("?", _show_help, "help"))
+	_menu_button = _button("Menu", _show_menu, "menu")
+	_menu_button.tooltip_text = "Menu (Escape) · Settings and how to play"
+	_time_controls.add_child(_menu_button)
 	_resource_grid = GridContainer.new()
 	_resource_grid.columns = 6
-	_resource_grid.add_theme_constant_override("h_separation", 8)
-	_resource_grid.add_theme_constant_override("v_separation", 5)
+	_resource_grid.add_theme_constant_override("h_separation", _px(8))
+	_resource_grid.add_theme_constant_override("v_separation", _px(5))
 	_layout.add_child(_resource_grid)
 	for item in [["food", "FOOD", Color("e8bd83")], ["water", "WATER", Color("86c6d0")], ["air", "AIR", Color("9fe6bd")], ["power", "POWER", Color("e9d28d")], ["ore", "STONE", Color("c3bbb1")], ["biomass", "BIOMASS", Color("b1cd8a")]]:
 		var panel := PanelContainer.new()
@@ -176,7 +190,7 @@ func _build_interface() -> void:
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_resource_grid.add_child(panel)
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 4)
+		row.add_theme_constant_override("separation", _px(4))
 		panel.add_child(row)
 		var name_label := _label(item[1], 10, MUTED)
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -190,18 +204,27 @@ func _build_interface() -> void:
 	_world_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_world_frame.custom_minimum_size.y = 140
 	_layout.add_child(_world_frame)
-	world = WorldView.new()
-	world.simulation = simulation
-	world.cell_activated.connect(_activate_cell)
-	world.cell_hovered.connect(_hover_cell)
-	world.cancel_requested.connect(func(): _select_tool("inspect"))
-	_world_frame.add_child(world)
+	if not is_instance_valid(world):
+		world = WorldView.new()
+		world.name = "World"
+		world.simulation = simulation
+		world.cell_activated.connect(_activate_cell)
+		world.cell_hovered.connect(_hover_cell)
+		world.cancel_requested.connect(func(): _select_tool("inspect"))
+		_world_frame.add_child(world)
+	else:
+		world.reparent(_world_frame)
+		var previous_overlay := world.get_node_or_null("WorldUI")
+		if previous_overlay:
+			world.remove_child(previous_overlay)
+			previous_overlay.queue_free()
 	var world_overlay := MarginContainer.new()
+	world_overlay.name = "WorldUI"
 	world_overlay.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	world_overlay.offset_left = 12
-	world_overlay.offset_right = -12
-	world_overlay.offset_top = 10
-	world_overlay.offset_bottom = 45
+	world_overlay.offset_left = _px(12)
+	world_overlay.offset_right = -_px(12)
+	world_overlay.offset_top = _px(10)
+	world_overlay.offset_bottom = _px(45)
 	world_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	world.add_child(world_overlay)
 	var world_top := HBoxContainer.new()
@@ -212,24 +235,24 @@ func _build_interface() -> void:
 	_world_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	world_top.add_child(_world_hint)
 	_air_button = _button("Air", _toggle_air, "air")
-	_air_button.custom_minimum_size = Vector2(48, 32)
+	_air_button.custom_minimum_size = Vector2(_px(48), _px(32))
 	_air_button.toggle_mode = true
 	world_top.add_child(_air_button)
 	var home_button := _button("Home", func(): world.fit_colony(); world.grab_focus(), "home")
-	home_button.custom_minimum_size.y = 32
+	home_button.custom_minimum_size.y = _px(32)
 	world_top.add_child(home_button)
 	_status_row = HBoxContainer.new()
-	_status_row.add_theme_constant_override("separation", 12)
+	_status_row.add_theme_constant_override("separation", _px(12))
 	_layout.add_child(_status_row)
 	var goal_column := VBoxContainer.new()
 	goal_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	goal_column.add_theme_constant_override("separation", 5)
+	goal_column.add_theme_constant_override("separation", _px(5))
 	_status_row.add_child(goal_column)
 	_objective = _label("DAY 1 / 5 · Find your footing", 13, TEXT)
 	_objective.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	goal_column.add_child(_objective)
 	_objective_bar = ProgressBar.new()
-	_objective_bar.custom_minimum_size.y = 4
+	_objective_bar.custom_minimum_size.y = _px(4)
 	_objective_bar.show_percentage = false
 	goal_column.add_child(_objective_bar)
 	_crew_label = _label("", 12, MUTED)
@@ -240,7 +263,7 @@ func _build_interface() -> void:
 	_layout.add_child(_tools_panel)
 	var tools_column := VBoxContainer.new()
 	tools_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	tools_column.add_theme_constant_override("separation", 5)
+	tools_column.add_theme_constant_override("separation", _px(5))
 	_tools_panel.add_child(tools_column)
 	var title_row := HBoxContainer.new()
 	tools_column.add_child(title_row)
@@ -251,60 +274,68 @@ func _build_interface() -> void:
 	legend.name = "ToolLegend"
 	title_row.add_child(legend)
 	_details_button = _button("Info", func(): _details_open = not _details_open; _responsive_layout(), "details")
-	_details_button.custom_minimum_size.y = 32
+	_details_button.custom_minimum_size.y = _px(32)
 	title_row.add_child(_details_button)
 	var scroll := ScrollContainer.new()
 	_tools_scroll = scroll
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.follow_focus = true
-	scroll.custom_minimum_size.y = 56
+	scroll.custom_minimum_size.y = _px(56)
 	tools_column.add_child(scroll)
 	_tools_grid = GridContainer.new()
 	_tools_grid.columns = TOOLS.size()
 	_tools_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_tools_grid.add_theme_constant_override("separation", 6)
-	_tools_grid.add_theme_constant_override("h_separation", 6)
-	_tools_grid.add_theme_constant_override("v_separation", 6)
+	_tools_grid.add_theme_constant_override("separation", _px(6))
+	_tools_grid.add_theme_constant_override("h_separation", _px(6))
+	_tools_grid.add_theme_constant_override("v_separation", _px(6))
 	scroll.add_child(_tools_grid)
 	for kind in TOOLS:
 		var button := _button(SHORTCUTS[kind] + "  " + SHORT_NAMES[kind], func(): _select_tool(kind), "tool_" + kind)
-		button.custom_minimum_size = Vector2(98, 48)
-		button.add_theme_font_size_override("font_size", 13)
+		button.custom_minimum_size = Vector2(_px(98), _px(48))
+		button.add_theme_font_size_override("font_size", _px(13))
 		button.toggle_mode = true
 		button.button_pressed = kind == "inspect"
 		_tools_grid.add_child(button)
 		_tool_buttons[kind] = button
 	_tool_description = _label("Inspect · Click a colonist, building or cave tile to learn about it.", 13, TEXT)
 	_tool_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_tool_description.custom_minimum_size.y = 30
+	_tool_description.custom_minimum_size.y = _px(30)
 	_tool_description.max_lines_visible = 3
 	tools_column.add_child(_tool_description)
 	_inspection = _label("Tip: extend the lower root ladder to reach the quarry.", 12, MUTED)
 	_inspection.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_inspection.custom_minimum_size.y = 28
+	_inspection.custom_minimum_size.y = _px(28)
 	_inspection.max_lines_visible = 2
 	tools_column.add_child(_inspection)
 	_feedback = _label("Welcome to the First Hollow.", 12, GOLD)
 	_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_feedback.custom_minimum_size.y = 18
+	_feedback.custom_minimum_size.y = _px(18)
 	_feedback.max_lines_visible = 2
 	_layout.add_child(_feedback)
 	_play_area = HBoxContainer.new()
-	_play_area.add_theme_constant_override("separation", 14)
+	_play_area.add_theme_constant_override("separation", _px(14))
 	_play_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_play_area.visible = false
 	_layout.add_child(_play_area)
 	_sidebar = VBoxContainer.new()
-	_sidebar.custom_minimum_size.x = 264
-	_sidebar.add_theme_constant_override("separation", 12)
+	_sidebar.custom_minimum_size.x = _px(264)
+	_sidebar.add_theme_constant_override("separation", _px(12))
 	_play_area.add_child(_sidebar)
 
 func _responsive_layout() -> void:
 	if not _root_margin:
 		return
-	_compact = size.x < 580
-	var desktop := size.x >= 1000 and size.y >= 650
+	var target_scale := _ui_settings.applied_percent(size) / 100.0
+	if not is_equal_approx(target_scale, _ui_scale) and not _scale_rebuild_pending:
+		_scale_rebuild_pending = true
+		call_deferred("_rebuild_scaled_interface")
+	var layout_state := [size, _ui_scale, _details_open, paused, _overlay_kind, _world_frame.size.x]
+	if layout_state == _last_layout_state:
+		return
+	_last_layout_state = layout_state
+	_compact = size.x < _px(580)
+	var desktop := size.x >= maxf(1000, _px(750)) and size.y >= 650
 	if desktop != _desktop_layout:
 		_desktop_layout = desktop
 		if desktop:
@@ -334,37 +365,92 @@ func _responsive_layout() -> void:
 	_tool_description.max_lines_visible = 5 if desktop else 3
 	_inspection.max_lines_visible = 5 if desktop else 2
 	_feedback.max_lines_visible = 4 if desktop else 2
-	var padding := 10 if _compact else 20
+	var padding := _px(10 if _compact else 20)
 	for side in ["left", "right", "top", "bottom"]:
 		_root_margin.add_theme_constant_override("margin_" + side, padding)
-	_layout.add_theme_constant_override("separation", 7 if _compact else 10)
-	_brand.add_theme_font_size_override("font_size", 21 if _compact else 27)
+	_layout.add_theme_constant_override("separation", _px(7 if _compact else 10))
+	_brand.add_theme_font_size_override("font_size", _px(20 if _compact else 27))
 	_subtitle.visible = not _compact
-	_resource_grid.columns = 3 if size.x < 680 else 6
+	_resource_grid.columns = 3 if size.x < _px(680) else 6
 	_crew_label.visible = false
-	_world_hint.visible = size.x >= 600
-	_tool_title.get_parent().get_node("ToolLegend").visible = not desktop and size.x >= 600
-	if size.x < 420:
+	_world_hint.visible = _world_frame.size.x >= _px(600)
+	_tool_title.get_parent().get_node("ToolLegend").visible = not desktop and size.x >= _px(600)
+	_menu_button.text = "Menu"
+	if size.x < _px(420):
 		_pause_button.text = "II" if not paused else ">"
 		_pause_button.tooltip_text = "Pause / resume (Space)"
 	else:
 		_pause_button.text = "Resume" if paused else "Pause"
-	_header_row.add_theme_constant_override("separation", 4 if _compact else 16)
-	_time_controls.add_theme_constant_override("separation", 3 if _compact else 5)
+	_header_row.add_theme_constant_override("separation", _px(4 if _compact else 16))
+	_time_controls.add_theme_constant_override("separation", _px(3 if _compact else 5))
 	if _overlay_card:
-		_overlay_card.custom_minimum_size.x = minf(500, maxf(260, size.x - 32))
+		_overlay_card.custom_minimum_size.x = minf(_px(500), maxf(260, size.x - 32))
 		_overlay_card.size.x = _overlay_card.custom_minimum_size.x
-		_overlay_card.position = (size - _overlay_card.size) * 0.5
+	if is_instance_valid(_scale_description):
+		_scale_description.text = _ui_settings.description(size)
+		for percent in _scale_buttons:
+			_scale_buttons[percent].disabled = int(percent) > _ui_settings.maximum_percent(size)
+		_refresh_settings_focus()
+
+func _rebuild_scaled_interface() -> void:
+	_scale_rebuild_pending = false
+	var next_scale := _ui_settings.applied_percent(size) / 100.0
+	if is_equal_approx(next_scale, _ui_scale):
+		return
+	world.clear_pointer_state()
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	var focus_name := str(focus_owner.name) if is_instance_valid(focus_owner) else "World"
+	var modal := _overlay_kind
+	var details := _details_open
+	var feedback_text := _feedback.text
+	# Recreate native UI metrics, keeping the same world and simulation instances.
+	# Its camera, zoom, motion state and physical coordinate mapping are untouched.
+	world.reparent(self)
+	remove_child(_root_margin)
+	_root_margin.queue_free()
+	_controls.clear()
+	_tool_buttons.clear()
+	_resource_labels.clear()
+	_ui_scale = next_scale
+	_desktop_layout = false
+	_last_layout_state.clear()
+	_build_theme()
+	_build_interface()
+	_select_tool(selected_tool)
+	_details_open = details
+	_feedback.text = feedback_text
+	_set_speed(speed)
+	_air_button.button_pressed = world.show_air
+	_responsive_layout()
+	_refresh()
+	if modal != "":
+		_render_overlay(modal)
+	_restore_focus(focus_name)
+	_publish_snapshot()
+
+func _choose_scale(percent: int) -> void:
+	_ui_settings.choose(percent)
+	_rebuild_scaled_interface()
+	if _overlay_kind == "settings":
+		for value in _scale_buttons:
+			_scale_buttons[value].button_pressed = int(value) == _ui_settings.requested_percent
+		_scale_description.text = _ui_settings.description(size)
+	_publish_snapshot()
 
 func _process(delta: float) -> void:
 	if simulation == null:
 		return
 	world.simulation_paused = paused or _overlay_kind != "" or simulation.status != "playing"
 	if started and not paused and _overlay_kind == "" and simulation.status == "playing":
+		# Keep fractional time through pauses and menus so visual interpolation
+		# resumes the same segment. Paused frames never add simulation time.
 		_accumulator = minf(_accumulator + minf(delta, 0.25) * speed, 0.75)
 		while _accumulator >= 0.1:
+			world.begin_simulation_step()
 			simulation.step(0.1)
+			world.end_simulation_step()
 			_accumulator -= 0.1
+	world.present_frame(_accumulator / 0.1, delta, speed, started and not paused and _overlay_kind == "" and simulation.status == "playing")
 	_refresh_timer += delta
 	_feedback_remaining = maxf(0, _feedback_remaining - delta)
 	if _refresh_timer >= 0.25:
@@ -429,7 +515,7 @@ func _select_tool(kind: String) -> void:
 	_tool_title.text = "SELECTED: " + str(SHORT_NAMES[kind]).to_upper()
 	_update_inspection()
 	_responsive_layout()
-	if started:
+	if started and _overlay_kind == "":
 		world.grab_focus()
 	_publish_snapshot()
 
@@ -501,7 +587,6 @@ func _toggle_pause() -> void:
 		return
 	paused = not paused
 	world.clear_pointer_state()
-	_accumulator = 0
 	_set_feedback("Take your time. You can plan construction while paused." if paused else "The hollow is waking up again.")
 	_refresh()
 	world.grab_focus()
@@ -510,21 +595,20 @@ func _set_speed(value: int) -> void:
 	speed = value
 	_speed_one.button_pressed = speed == 1
 	_speed_three.button_pressed = speed == 3
-	if started:
+	if started and _overlay_kind == "":
 		world.grab_focus()
 
 func _toggle_air() -> void:
 	world.show_air = not world.show_air
 	_air_button.button_pressed = world.show_air
 	_set_feedback("Air overlay: green is healthy, amber is low, coral is dangerous." if world.show_air else "Air overlay hidden.")
-	if started:
+	if started and _overlay_kind == "":
 		world.grab_focus()
 
 func _on_focus_lost() -> void:
 	world.clear_pointer_state()
 	if started and simulation.status == "playing":
 		paused = true
-		_accumulator = 0
 		_refresh()
 
 func _on_browser_visibility(_arguments: Array) -> void:
@@ -535,9 +619,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
 		return
 	if _overlay_kind != "":
-		if event.keycode == KEY_ESCAPE and _overlay_kind == "help":
-			_close_help()
-			get_viewport().set_input_as_handled()
 		return
 	if not started:
 		return
@@ -545,8 +626,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	match event.keycode:
 		KEY_SPACE:
 			_toggle_pause()
-		KEY_ESCAPE:
-			_select_tool("inspect")
 		KEY_H:
 			_show_help()
 		KEY_V:
@@ -601,6 +680,14 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
 		return
+	# Escape is global, including when a native button or scroll panel has focus.
+	if event.keycode == KEY_ESCAPE:
+		if _overlay_kind in ["menu", "settings", "help"]:
+			_back_modal()
+		else:
+			_show_menu()
+		get_viewport().set_input_as_handled()
+		return
 	# A focused world owns its arrows, rather than handing them to button navigation.
 	if _overlay_kind == "" and get_viewport().gui_get_focus_owner() == world:
 		_unhandled_key_input(event)
@@ -608,13 +695,13 @@ func _input(event: InputEvent) -> void:
 		var amount := 0
 		match event.keycode:
 			KEY_DOWN:
-				amount = 40
+				amount = _px(40)
 			KEY_UP:
-				amount = -40
+				amount = -_px(40)
 			KEY_PAGEDOWN:
-				amount = 240
+				amount = _px(240)
 			KEY_PAGEUP:
-				amount = -240
+				amount = -_px(240)
 		if amount != 0:
 			_help_scroll.scroll_vertical += amount
 			get_viewport().set_input_as_handled()
@@ -623,10 +710,13 @@ func _new_overlay(kind: String) -> VBoxContainer:
 	world.clear_pointer_state()
 	_set_background_enabled(false)
 	if _overlay:
+		remove_child(_overlay)
 		_overlay.queue_free()
+	_help_scroll = null
+	_scale_description = null
+	_scale_buttons.clear()
 	_overlay_kind = kind
 	world.interactive = false
-	_focus_before_overlay = get_viewport().gui_get_focus_owner()
 	_overlay = Control.new()
 	_overlay.name = "Overlay"
 	_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -636,18 +726,144 @@ func _new_overlay(kind: String) -> VBoxContainer:
 	veil.color = Color(0.015, 0.04, 0.055, 0.74)
 	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_overlay.add_child(veil)
+	_overlay_scroll = ScrollContainer.new()
+	_overlay_scroll.name = "ModalScroll"
+	_overlay_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_overlay_scroll.offset_left = 16
+	_overlay_scroll.offset_top = 16
+	_overlay_scroll.offset_right = -16
+	_overlay_scroll.offset_bottom = -16
+	_overlay_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_overlay_scroll.follow_focus = true
+	_overlay.add_child(_overlay_scroll)
 	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_overlay.add_child(center)
+	_overlay_scroll.add_child(center)
 	_overlay_card = PanelContainer.new()
-	_overlay_card.custom_minimum_size.x = minf(500, maxf(260, size.x - 32))
+	_overlay_card.custom_minimum_size.x = minf(_px(500), maxf(260, size.x - 32))
 	_overlay_card.add_theme_stylebox_override("panel", _panel(Color("102b30"), Color("52725e"), 15, 24 if size.x >= 420 else 18))
 	center.add_child(_overlay_card)
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 14)
+	column.add_theme_constant_override("separation", _px(14))
 	_overlay_card.add_child(column)
 	return column
+
+func _push_modal(kind: String) -> void:
+	var focused := get_viewport().gui_get_focus_owner()
+	_modal_history.append({"kind": _overlay_kind, "focus": str(focused.name) if is_instance_valid(focused) else "World"})
+	_render_overlay(kind)
+	_publish_snapshot()
+
+func _render_overlay(kind: String) -> void:
+	match kind:
+		"title": _show_title()
+		"help": _render_help()
+		"menu": _render_menu()
+		"settings": _render_settings()
+		"outcome": _render_outcome()
+
+func _back_modal() -> void:
+	if _modal_history.is_empty():
+		if simulation.status in ["won", "lost"]:
+			_render_outcome()
+		elif not started:
+			_show_title()
+		else:
+			_close_overlay()
+			world.grab_focus()
+	else:
+		var previous: Dictionary = _modal_history.pop_back()
+		if previous.kind == "":
+			_close_overlay()
+		else:
+			_render_overlay(str(previous.kind))
+		_restore_focus(str(previous.focus))
+	_refresh()
+	_publish_snapshot()
+
+func _restore_focus(control_name: String) -> void:
+	if control_name == "World" and _overlay_kind == "":
+		world.grab_focus()
+	elif _controls.has(control_name) and is_instance_valid(_controls[control_name]):
+		var control: Button = _controls[control_name]
+		if control.is_visible_in_tree() and not control.disabled:
+			control.grab_focus()
+
+func _trap_focus(controls: Array) -> void:
+	for index in range(controls.size()):
+		var current: Control = controls[index]
+		var next: Control = controls[(index + 1) % controls.size()]
+		var previous: Control = controls[posmod(index - 1, controls.size())]
+		current.focus_next = next.get_path()
+		current.focus_previous = previous.get_path()
+		current.focus_neighbor_bottom = next.get_path()
+		current.focus_neighbor_top = previous.get_path()
+
+func _show_menu() -> void:
+	_push_modal("menu")
+
+func _render_menu() -> void:
+	var column := _new_overlay("menu")
+	_overlay_text(column, "A MOMENT IN THE HOLLOW", 11, GOLD)
+	_overlay_text(column, "Take your time.", 30, MINT)
+	_overlay_text(column, "The colony is paused while this menu is open.", 14, MUTED)
+	var context := str(_modal_history.back().kind) if not _modal_history.is_empty() else ""
+	var resume_text := "Back to title" if context == "title" else "Back to results" if context == "outcome" else "Resume"
+	var resume := _button(resume_text, _back_modal, "resume")
+	column.add_child(resume)
+	var settings := _button("Settings", func(): _push_modal("settings"), "settings")
+	column.add_child(settings)
+	var help := _button("How to play", _show_help, "menu_help")
+	column.add_child(help)
+	_overlay_text(column, "Escape goes back · Tab moves between controls", 11, MUTED)
+	_trap_focus([resume, settings, help])
+	resume.grab_focus()
+
+func _render_settings() -> void:
+	var column := _new_overlay("settings")
+	_overlay_text(column, "MAKE YOURSELF COMFORTABLE", 11, GOLD)
+	_overlay_text(column, "Settings", 30, MINT)
+	_overlay_text(column, "Interface size", 17)
+	_scale_description = _overlay_text(column, _ui_settings.description(size), 13, MUTED)
+	var options := GridContainer.new()
+	options.columns = 3
+	options.add_theme_constant_override("h_separation", _px(8))
+	options.add_theme_constant_override("v_separation", _px(8))
+	column.add_child(options)
+	var focus_controls: Array = []
+	for percent in UISettings.SCALE_PRESETS:
+		var button := _button("%d%%" % percent, func(): _choose_scale(percent), "scale_%d" % percent)
+		button.toggle_mode = true
+		button.button_pressed = percent == _ui_settings.requested_percent
+		button.disabled = percent > _ui_settings.maximum_percent(size)
+		button.tooltip_text = "Enlarge this window to use this size." if button.disabled else "Resize interface text and controls."
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		options.add_child(button)
+		_scale_buttons[percent] = button
+		if not button.disabled:
+			focus_controls.append(button)
+	_overlay_text(column, "Changes apply immediately. World zoom stays the same. Your choice lasts for this session, including new colonies; it resets when the game closes.", 13, MUTED)
+	var reset := _button("Reset to 100%", func(): _choose_scale(100), "reset_scale")
+	column.add_child(reset)
+	var back := _button("Back", _back_modal, "back_settings")
+	column.add_child(back)
+	focus_controls.append(reset)
+	focus_controls.append(back)
+	_trap_focus(focus_controls)
+	back.grab_focus()
+
+func _refresh_settings_focus() -> void:
+	var controls: Array = []
+	for percent in UISettings.SCALE_PRESETS:
+		if _scale_buttons.has(percent) and not _scale_buttons[percent].disabled:
+			controls.append(_scale_buttons[percent])
+	for key in ["reset_scale", "back_settings"]:
+		if _controls.has(key) and is_instance_valid(_controls[key]):
+			controls.append(_controls[key])
+	if not controls.is_empty():
+		_trap_focus(controls)
 
 func _set_background_enabled(enabled: bool) -> void:
 	# Mouse veils alone do not remove hidden controls from Godot's focus traversal.
@@ -675,28 +891,28 @@ func _show_title() -> void:
 	_overlay_text(column, "YOUR FIRST CHAPTER", 11, GOLD)
 	_overlay_text(column, "Survive five days. Build a beacon. Keep your little colony thriving.", 14)
 	_start_button = _button("Enter the hollow", _start_game, "start")
-	_start_button.custom_minimum_size.y = 50
+	_start_button.custom_minimum_size.y = _px(50)
 	_start_button.add_theme_stylebox_override("normal", _panel(Color("91cda8"), MINT, 7, 12))
 	_start_button.add_theme_color_override("font_color", Color("10292b"))
 	_start_button.add_theme_color_override("font_focus_color", Color("10292b"))
 	_start_button.add_theme_color_override("font_hover_color", Color("10292b"))
 	_start_button.add_theme_stylebox_override("hover", _panel(Color("afe5bf"), MINT, 7, 12))
 	column.add_child(_start_button)
+	var secondary := HBoxContainer.new()
+	secondary.add_theme_constant_override("separation", _px(8))
+	column.add_child(secondary)
 	_how_button = _button("How to play", _show_help, "how_to_play")
-	_how_button.custom_minimum_size.y = 44
-	column.add_child(_how_button)
-	_start_button.focus_next = _how_button.get_path()
-	_start_button.focus_previous = _how_button.get_path()
-	_start_button.focus_neighbor_top = _how_button.get_path()
-	_start_button.focus_neighbor_bottom = _how_button.get_path()
-	_how_button.focus_next = _start_button.get_path()
-	_how_button.focus_previous = _start_button.get_path()
-	_how_button.focus_neighbor_top = _start_button.get_path()
-	_how_button.focus_neighbor_bottom = _start_button.get_path()
+	_how_button.custom_minimum_size.y = _px(44)
+	_how_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	secondary.add_child(_how_button)
+	var menu := _button("Menu", _show_menu, "title_menu")
+	secondary.add_child(menu)
+	_trap_focus([_start_button, _how_button, menu])
 	_overlay_text(column, "A playable first chapter · No live-run saves", 11, MUTED)
 	_start_button.grab_focus()
 
 func _start_game() -> void:
+	_modal_history.clear()
 	started = true
 	paused = false
 	_close_overlay()
@@ -705,24 +921,27 @@ func _start_game() -> void:
 	_publish_snapshot()
 
 func _show_help() -> void:
+	_push_modal("help")
+
+func _render_help() -> void:
 	var column := _new_overlay("help")
 	_overlay_text(column, "FIELD NOTES", 11, GOLD)
 	_overlay_text(column, "A hollow worth tending", 25 if size.x >= 420 else 21, MINT)
 	var scroll := ScrollContainer.new()
 	_help_scroll = scroll
 	scroll.focus_mode = Control.FOCUS_ALL
-	scroll.custom_minimum_size.y = minf(340, size.y - 240)
+	scroll.custom_minimum_size.y = maxf(100, minf(_px(340), size.y - _px(240)))
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.follow_focus = true
 	column.add_child(scroll)
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 12)
+	body.add_theme_constant_override("separation", _px(12))
 	scroll.add_child(body)
-	var help_label := _overlay_text(body, "PLAN, THEN WATCH\nSelect a tool and click a tile. Settlers walk to reachable jobs and do the work. Drag the Dig tool across rock to mark a tunnel.\n\nA LIVING CHAIN\nCisterns gather water. Mushrooms make food, airferns replenish air, and both need nearby light. Generators burn biomass to power lamps and your beacon.\n\nYOUR FIRST STEPS\nYour four settlers need two mushroom beds and two airferns. Place another mushroom planter just left of the generator, and an airfern just left of the glow lamp. Dig the rock beneath the lower ladder, then extend the ladder into the Root Quarry. Gather stone on the right and living roots on the left. The space between the lamp and the first mushrooms is a good home for your beacon.\n\nTHE GOAL\nSurvive five full days (20 minutes at 1x). Keep a powered beacon, healthy settlers, steady food/air/water/power production and 8 food + 10 water in reserve for two minutes. The objective tells you what is missing.\n\nGIVE THEM A WAY THROUGH\nBuild ladders to reach different levels. Inaccessible jobs wait until a route exists. Cancel a planned build to recover its reserved materials.\n\nCONTROLS\n0 Inspect · 1 Dig · 2 Ladder · 3 Cot\n4 Mushrooms · 5 Airfern · 6 Lamp\n7 Generator · 8 Cistern · 9 Beacon\nX Cancel job · Space Pause · V Air\nArrows move the tile cursor · Enter acts\nWASD or middle-drag pans · Wheel zooms\nHome centers the colony · Escape clears tool\nTab moves between buttons.\n\nTake your time. Construction can be planned while paused. Click a building to read why it is not working. This first chapter does not save a live run.", 14, TEXT)
+	var help_label := _overlay_text(body, "PLAN, THEN WATCH\nSelect a tool and click a tile. Settlers walk to reachable jobs and do the work. Drag the Dig tool across rock to mark a tunnel.\n\nA LIVING CHAIN\nCisterns gather water. Mushrooms make food, airferns replenish air, and both need nearby light. Generators burn biomass to power lamps and your beacon.\n\nYOUR FIRST STEPS\nYour four settlers need two mushroom beds and two airferns. Place another mushroom planter just left of the generator, and an airfern just left of the glow lamp. Dig the rock beneath the lower ladder, then extend the ladder into the Root Quarry. Gather stone on the right and living roots on the left. The space between the lamp and the first mushrooms is a good home for your beacon.\n\nTHE GOAL\nSurvive five full days (20 minutes at 1x). Keep a powered beacon, healthy settlers, steady food/air/water/power production and 8 food + 10 water in reserve for two minutes. The objective tells you what is missing.\n\nGIVE THEM A WAY THROUGH\nBuild ladders to reach different levels. Inaccessible jobs wait until a route exists. Cancel a planned build to recover its reserved materials.\n\nCONTROLS\n0 Inspect · 1 Dig · 2 Ladder · 3 Cot\n4 Mushrooms · 5 Airfern · 6 Lamp\n7 Generator · 8 Cistern · 9 Beacon\nX Cancel job · Space Pause · V Air\nArrows move the tile cursor · Enter acts\nWASD or middle-drag pans · Wheel zooms\nHome centers the colony · Escape opens the menu\nTab moves between buttons.\n\nTake your time. Construction can be planned while paused. Click a building to read why it is not working. This first chapter does not save a live run.", 14, TEXT)
 	help_label.focus_mode = Control.FOCUS_ALL
-	var close := _button("Back to the hollow" if started else "Back", _close_help, "close_help")
-	close.custom_minimum_size.y = 46
+	var close := _button("Back", _close_help, "close_help")
+	close.custom_minimum_size.y = _px(46)
 	column.add_child(close)
 	close.focus_next = scroll.get_path()
 	close.focus_previous = scroll.get_path()
@@ -732,27 +951,28 @@ func _show_help() -> void:
 	close.grab_focus()
 
 func _close_help() -> void:
-	if not started:
-		_show_title()
-	elif simulation.status in ["won", "lost"]:
-		_show_outcome()
-	else:
-		_close_overlay()
-		world.grab_focus()
+	_back_modal()
 
 func _close_overlay() -> void:
 	world.clear_pointer_state()
 	if _overlay:
+		remove_child(_overlay)
 		_overlay.queue_free()
 	_overlay = null
 	_overlay_card = null
 	_overlay_kind = ""
 	_help_scroll = null
+	_overlay_scroll = null
+	_scale_description = null
+	_scale_buttons.clear()
 	world.interactive = started and simulation.status == "playing"
 	_set_background_enabled(world.interactive)
-	_accumulator = 0
 
 func _show_outcome() -> void:
+	_modal_history.clear()
+	_render_outcome()
+
+func _render_outcome() -> void:
 	var won: bool = simulation.status == "won"
 	var column := _new_overlay("outcome")
 	_overlay_text(column, "CHAPTER COMPLETE" if won else "THE HOLLOW FALLS QUIET", 11, GOLD)
@@ -760,18 +980,17 @@ func _show_outcome() -> void:
 	_overlay_text(column, "Your settlers have made a living home beneath the surface. The beacon shines, and the cavern is no longer a lonely place." if won else "The last settler has fallen. A fresh colony brings new supplies and another chance to find your balance.", 15, MUTED)
 	_overlay_text(column, "Day %d · %d jobs waiting" % [simulation.day, simulation.jobs.size()], 13)
 	var retry := _button("Begin a new colony", _restart, "restart")
-	retry.custom_minimum_size.y = 48
+	retry.custom_minimum_size.y = _px(48)
 	column.add_child(retry)
-	retry.focus_next = retry.get_path()
-	retry.focus_previous = retry.get_path()
-	retry.focus_neighbor_top = retry.get_path()
-	retry.focus_neighbor_bottom = retry.get_path()
-	retry.focus_neighbor_left = retry.get_path()
-	retry.focus_neighbor_right = retry.get_path()
+	var menu := _button("Menu", _show_menu, "outcome_menu")
+	column.add_child(menu)
+	_trap_focus([retry, menu])
 	retry.grab_focus()
 
 func _restart() -> void:
 	simulation.reset(42)
+	_accumulator = 0
+	world.reset_motion()
 	_last_status = "playing"
 	paused = false
 	speed = 1
@@ -795,7 +1014,7 @@ func _publish_snapshot() -> void:
 				if ancestor.clip_contents:
 					visible_rect = visible_rect.intersection(ancestor.get_global_rect())
 				ancestor = ancestor.get_parent()
-			controls[key] = {"x": rect.position.x, "y": rect.position.y, "width": rect.size.x, "height": rect.size.y, "text": control.text if control is Button else "", "disabled": control.disabled if control is Button else false, "visible": visible_rect.has_area(), "clip": {"x": visible_rect.position.x, "y": visible_rect.position.y, "width": visible_rect.size.x, "height": visible_rect.size.y}}
+			controls[key] = {"x": rect.position.x, "y": rect.position.y, "width": rect.size.x, "height": rect.size.y, "text": control.text if control is Button else "", "font_size": control.get_theme_font_size("font_size"), "disabled": control.disabled if control is Button else false, "visible": visible_rect.has_area(), "clip": {"x": visible_rect.position.x, "y": visible_rect.position.y, "width": visible_rect.size.x, "height": visible_rect.size.y}}
 	var settlers := []
 	for colonist in simulation.colonists:
 		settlers.append({"id": colonist.id, "name": colonist.name, "x": colonist.pos.x, "y": colonist.pos.y, "health": colonist.health, "hunger": colonist.hunger, "energy": colonist.energy, "task": colonist.task, "alive": colonist.alive})
@@ -811,4 +1030,7 @@ func _publish_snapshot() -> void:
 	var data := {"started": started, "paused": paused, "speed": speed, "overlay": _overlay_kind, "status": simulation.status, "elapsed": simulation.elapsed, "day": simulation.day, "resources": simulation.resources.duplicate(), "selected_tool": selected_tool, "air_overlay": world.show_air, "colonists": settlers, "buildings": buildings, "jobs": jobs, "feedback": _feedback.text, "inspection": _inspection.text, "objective": _objective.text, "objective_progress": simulation.objective_progress, "controls": controls, "cursor": {"x": world.cursor.x, "y": world.cursor.y}, "viewport": {"width": size.x, "height": size.y}, "world": {"x": world_rect.position.x, "y": world_rect.position.y, "width": world_rect.size.x, "height": world_rect.size.y, "camera_x": world.camera.x, "camera_y": world.camera.y, "tile_size": world.TILE * world.zoom_level}, "overlay_card": {"x": card_rect.position.x, "y": card_rect.position.y, "width": card_rect.size.x, "height": card_rect.size.y}, "title_inner": {"x": card_rect.position.x + 1, "y": card_rect.position.y + 1, "width": card_rect.size.x - 2, "height": card_rect.size.y - 2}}
 	data["focused_control"] = str(focused_control.name) if is_instance_valid(focused_control) else ""
 	data["pointer_state"] = {"dig_drag": world._dig_drag, "pan_drag": world._dragging}
+	data["ui_scale"] = {"requested": _ui_settings.requested_percent, "applied": roundi(_ui_scale * 100), "maximum": _ui_settings.maximum_percent(size), "description": _ui_settings.description(size)}
+	data["modal_return"] = str(_modal_history.back().kind) if not _modal_history.is_empty() else ""
+	data["modal_scroll"] = _overlay_scroll.scroll_vertical if is_instance_valid(_overlay_scroll) else 0
 	JavaScriptBridge.eval("window.__MOSSLIGHT_SNAPSHOT__ = " + JSON.stringify(data) + ";", true)
