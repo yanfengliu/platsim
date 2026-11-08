@@ -8,6 +8,8 @@
 
 **Whole-class regression:** The runtime stability suite checks the effective frame limit on engine startup and repeatedly exercises full scene destruction, menu replacement, UI scaling, new-colony resets and dimension-dependent terrain replacement. It checks retired node identities, warmed node/object counts and exact cache pixel budgets. Its optional timed headless soak uses the normal production frame loop and reports tracked memory/counts with bounded-growth assertions. An external watchdog bounds duration and process private memory. Headless checks and software WebGL capture do not establish native GPU-driver stability. Evidence and remaining limits are recorded in work 4.
 
+**Native follow-up (work 5):** An empty protected-directory search was initially interpreted too strongly because access errors were suppressed. LiveKernelReports and WER contents are unavailable to the non-administrator token; absence of a current dump is not established. Earlier successful native observer runs disabled persistent shader caching through a directory error, so they did not cover the normal cache-loading path. Offline parsing of all five preserved cache containers found valid bounds and matching counts/hashes; opaque driver binaries remain untested. Native cache color plus depth/stencil attachments total about 94.5 MiB before other resources, rather than the 47.3 MiB color-only figure. No causal fix is established, and the workstation graphics path remains unused during this follow-up.
+
 ## ML-V2 - Object proportions and flat build controls do not scale (2026-11-07)
 
 **Reported symptom:** Furniture and machinery looked implausibly tiny or oversized, and permanently numbered buttons for every object would not scale with the catalog.

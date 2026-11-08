@@ -10,7 +10,7 @@ Mosslight is a small 2D colony survival game set in a pixel-art living cave. Fou
 
 Open `mosslight/project.godot` in Godot 4.7.2 (standard GDScript edition), then press F5. The project supports Windows, macOS, and web exports. Native Mac execution has not been tested on this Windows machine. See [setup, controls and exports](mosslight/README.md).
 
-A whole-PC freeze shortly after Windows launch is under investigation. Rendering now has a 60 FPS cap, but the system-freeze cause remains unconfirmed. Headless memory checks and software-rendered gameplay do not certify native GPU stability. See the [investigation and limits](docs/work/4_runtime-stability/plan.md).
+A whole-PC freeze shortly after Windows launch is under investigation. Rendering now has a 60 FPS cap, but the system-freeze cause remains unconfirmed. Headless memory checks and software-rendered gameplay do not certify native GPU stability. See the [native investigation and evidence limits](docs/work/5_native-freeze/plan.md).
 
 Build (B) opens categories, then items with sizes and costs. Beds, machinery and tall equipment occupy appropriately sized multi-tile footprints. Escape opens the pause menu and Settings. UI scaling runs from 100% to 200% where the window has room. Space pauses; 1x/3x controls time. Digging has a two-handed swing, rock impact, recoil, and chips. There are no live-game saves in this prototype.
 
